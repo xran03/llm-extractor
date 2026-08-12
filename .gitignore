@@ -11,6 +11,7 @@ venv/
 
 # Native build products
 *.c
+*.pyx
 *.pyd
 *.so
 *.o

@@ -28,13 +28,17 @@ llm-extract -i ./docs -o ./out --api llmhub
 
 ## Install
 
+> **Not on PyPI.** The name `llm-extractor` there belongs to an unrelated
+> project, so `pip install llm-extractor` will **not** get you this package.
+> Install from this repository or from a release asset.
+
+From source — works on every platform, executes sequentially:
+
 ```bash
-pip install llm-extractor              # core, zero dependencies
-pip install "llm-extractor[pdf]"       # + PDF text  (pypdf)
-pip install "llm-extractor[all]"       # + PDF page rendering for scanned PDFs (PyMuPDF)
+pip install "llm-extractor[all] @ git+https://github.com/xran03/llm-extractor"
 ```
 
-From source:
+Or for development:
 
 ```bash
 git clone https://github.com/xran03/llm-extractor
@@ -42,24 +46,33 @@ cd llm-extractor
 pip install -e ".[all]"
 ```
 
+Extras: `[pdf]` adds PDF text (pypdf), `[all]` also adds page rendering for
+scanned PDFs (PyMuPDF). The core itself has no dependencies.
+
 ### Accelerated build
 
-Prebuilt wheels on the [releases page](https://github.com/xran03/llm-extractor/releases)
-bundle a compiled execution core that overlaps API calls across documents,
+The [releases page](https://github.com/xran03/llm-extractor/releases) carries
+wheels with a compiled execution core that overlaps API calls across documents,
 chunks and figures. Same CLI, same output, same tests — it only changes how the
 work is driven, and it is a large difference on a folder of thousands of files.
 
+Install the asset matching your platform and Python version by URL:
+
 ```bash
-# pick the wheel matching your platform and Python version
-pip install --find-links https://github.com/xran03/llm-extractor/releases/expanded_assets/v0.1.0 \
-            --upgrade llm-extractor
+pip install https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp313-cp313-win_amd64.whl
 ```
 
-Installing from source or from a platform without a published wheel is fully
-supported and falls back to sequential execution. Check which core is active:
+With the optional extras:
 
 ```bash
-llm-extract check          # -> execution : accelerated | sequential
+pip install "llm_extractor[all] @ https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp313-cp313-win_amd64.whl"
+```
+
+Platforms without a published wheel install from source and run sequentially,
+which is fully supported. Check which core is active:
+
+```bash
+llm-extract check          # -> execution : accelerated (compiled) | sequential (sequential)
 ```
 
 ## Credentials
