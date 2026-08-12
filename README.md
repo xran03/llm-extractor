@@ -20,7 +20,7 @@ llm-extract -i ./docs -o ./out --api llmhub
 | Figures carry the numbers | The vision pass returns **structured JSON** (items, tables, axes), so it merges with text records instead of being prose. |
 | One answer per document | An aggregation agent reconciles the text pass and the OCR pass, flags conflicts, and never invents records. |
 | Cost | Every call is cached by content hash. Re-runs, added files and code iteration are free. |
-| Trust | Records carry `_grounded` / `_value_grounded`; `llm-extract audit` replays a sample of cached calls and scores them. |
+| Trust | Records carry `_grounded` / `_value_grounded` / `_unit_grounded`; `llm-extract audit` replays a sample of cached calls and scores them. |
 | Growth | Sources, providers and templates are registries with entry points — a patent or literature connector is a separate pip package. |
 | Frontends | `llm-extract serve` exposes jobs, progress (SSE) and results over HTTP. |
 
@@ -230,13 +230,32 @@ A record always carries its evidence and two audit flags:
   "source_span": "Group A reached 12.5 ug/mL, higher than group B (p<0.01).",
   "doc_id": "report",
   "_grounded": true,
-  "_value_grounded": true
+  "_value_grounded": true,
+  "_unit_grounded": true,
+  "_ungrounded": []
 }
 ```
 
-`_grounded` means the quoted span was found in the document. `_value_grounded`
-means the number's digits appear inside that span — a value that fails this
-check was fabricated, and it is flagged rather than silently trusted.
+Four deterministic checks run on every record. They cost no tokens and no API
+calls, so they run on everything rather than on a sample:
+
+| Flag | Meaning |
+|---|---|
+| `_grounded` | the quoted span was really found in the document |
+| `_value_grounded` | **every** number in the record appears inside that span |
+| `_unit_grounded` | the units declared match the units the span actually writes |
+| `_ungrounded` | the field names that failed, so review can go straight to them |
+
+`_value_grounded` and `_unit_grounded` are `null` when the check does not apply
+(no number, or no unit stated in the evidence) — an unstated unit is reported as
+unknown, never as wrong.
+
+The span check is not a substring test: a quote that reproduces a real sentence
+and then appends an invented clause is rejected, as is one that swaps a group
+label or a number, while whitespace, case and OCR damage such as `ug/rnL` for
+`ug/mL` are tolerated. The unit check is what catches a value reported in
+`mg/mL` when the paper said `µg/mL` — a thousand-fold error that a plain number
+comparison passes.
 
 ## Try it
 
@@ -287,7 +306,7 @@ Rules the validator enforces, with a message naming the offending field:
 - field `type` is one of `string`, `number`, `integer`, `boolean`;
 - `enum` is a non-empty list, and only on string fields;
 - `key_fields` must name fields that exist;
-- `doc_id`, `doc_title`, `_grounded`, `_value_grounded` are reserved;
+- `doc_id`, `doc_title`, `_grounded`, `_value_grounded`, `_unit_grounded` and `_ungrounded` are reserved;
 - a `source_span` field is **required** — it is what makes a record checkable.
 
 Worked examples live in [`templates/`](templates/). The CSV columns follow the

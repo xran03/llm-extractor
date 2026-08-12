@@ -40,7 +40,8 @@ CONFIRM_THRESHOLD = 0.9
 SUSPECT_THRESHOLD = 0.5
 
 #: Audit flags are pipeline metadata, not model output; never compare them.
-IGNORED_FIELDS = {"doc_id", "_grounded", "_value_grounded", "_judge"}
+IGNORED_FIELDS = {"doc_id", "_grounded", "_value_grounded", "_unit_grounded",
+                  "_ungrounded", "_judge"}
 
 
 @dataclass

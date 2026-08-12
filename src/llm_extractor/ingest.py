@@ -123,8 +123,49 @@ def _unpack_media(path: Path, format_name: str, cache_dir) -> list:
     return figures
 
 
-def _render_pages(path: Path, cache_dir) -> list:
-    """Rasterise PDF pages so scanned documents can still be read."""
+#: A page whose text layer is at least this long, and which draws nothing, is
+#: treated as prose that the text pass already read in full.
+TEXT_ONLY_MIN_CHARS = 200
+
+#: Vector drawings below this count are rules, borders and underlines rather
+#: than a chart.
+VECTOR_DRAWING_MIN = 12
+
+#: An image covering this much of the page is the page — a scan, not a figure.
+FULL_PAGE_IMAGE_RATIO = 0.5
+
+
+def page_needs_vision(page, min_chars: int = TEXT_ONLY_MIN_CHARS) -> bool:
+    """Decide whether a PDF page carries anything the text pass could not read.
+
+    The vision pass is by far the most expensive stage — measured at roughly
+    2,100 input and 1,700 output tokens per page — and ``figures=RENDER`` sends
+    *every* page to it. On a born-digital paper most pages are prose that the
+    text extractor already has verbatim, so paying a vision model to re-read
+    them buys nothing.
+
+    PyMuPDF already exposes the signal, so no model and no training data are
+    needed: a page is worth rendering when it draws a chart, embeds a picture,
+    or has too little text to be prose (a scan, whose "text" is often empty).
+    When the signal cannot be read at all the answer is yes, because skipping a
+    page that did hold a figure is the more expensive mistake.
+    """
+    try:
+        images = page.get_images()
+        drawings = page.get_drawings()
+        text_length = len(page.get_text().strip())
+    except Exception:
+        return True
+
+    if text_length < min_chars:
+        return True                      # scan, cover page, or figure-only page
+    if images:
+        return True
+    return len(drawings) >= VECTOR_DRAWING_MIN
+
+
+def _render_pages(path: Path, cache_dir, triage: bool = True) -> list:
+    """Rasterise the PDF pages a vision model could actually add something to."""
     try:
         import fitz  # PyMuPDF
     except ImportError:
@@ -138,10 +179,12 @@ def _render_pages(path: Path, cache_dir) -> list:
     out_dir.mkdir(parents=True, exist_ok=True)
     figures = []
     for index in range(len(pdf)):
+        page = pdf.load_page(index)
+        if triage and not page_needs_vision(page):
+            continue
         image = out_dir / f"{path.stem}-p{index + 1:03d}.png"
         if not image.exists():
-            pdf.load_page(index).get_pixmap(matrix=fitz.Matrix(2, 2),
-                                            alpha=False).save(str(image))
+            page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False).save(str(image))
         figures.append(image)
     return figures
 

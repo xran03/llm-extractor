@@ -85,10 +85,24 @@ class RestSource(Source):
         if not self.base_url:
             raise RestSourceError(f"{self.name}: base_url is required")
         self.path = merged.get("path", "")
-        self.query = dict(merged.get("query") or {})
+        # `query` is a dict of static parameters, but from the command line
+        # (`--param query=vaccine`) it almost always arrives as a search term.
+        # Accepting both is what makes the documented invocation work instead
+        # of failing deep inside dict().
+        raw_query = merged.get("query")
+        search = merged.get("search")
+        if isinstance(raw_query, str):
+            search = search or raw_query
+            raw_query = None
+        elif raw_query is not None and not isinstance(raw_query, dict):
+            raise RestSourceError(
+                f"{self.name}: 'query' must be a search term or an object of "
+                f"query parameters, not {type(raw_query).__name__}"
+            )
+        self.query = dict(raw_query or {})
         self.query_param = merged.get("query_param", "q")
-        if merged.get("search"):
-            self.query[self.query_param] = merged["search"]
+        if search:
+            self.query[self.query_param] = search
 
         self.records_path = merged.get("records_path", "")
         self.id_field = merged.get("id_field", "id")

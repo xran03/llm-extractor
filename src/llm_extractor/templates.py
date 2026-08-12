@@ -136,7 +136,8 @@ class ExtractionTemplate:
 
 
 #: Field names the pipeline sets itself; a template must not redefine them.
-RESERVED_FIELD_NAMES = {"doc_id", "doc_title", "_grounded", "_value_grounded"}
+RESERVED_FIELD_NAMES = {"doc_id", "doc_title", "_grounded", "_value_grounded",
+                        "_unit_grounded", "_ungrounded"}
 ALLOWED_FIELD_TYPES = {"string", "number", "integer", "boolean"}
 ALLOWED_FIELD_KEYS = {"name", "type", "description", "enum"}
 

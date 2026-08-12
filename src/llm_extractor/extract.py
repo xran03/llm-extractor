@@ -120,7 +120,9 @@ def extract_records(provider, document, template, model: str,
             if not isinstance(raw, dict):
                 continue
             record = coerce_record(raw, template, document.doc_id)
-            annotate_grounding(record, document.text, numeric_fields=_numeric_fields(template))
+            annotate_grounding(record, document.text,
+                               numeric_fields=_numeric_fields(template),
+                               unit_fields=_unit_fields(template))
             result.records.append(record)
 
     result.records = dedupe(result.records, template)
@@ -129,6 +131,12 @@ def extract_records(provider, document, template, model: str,
 
 def _numeric_fields(template) -> tuple:
     return tuple(f.name for f in template.fields if f.type in ("number", "integer"))
+
+
+def _unit_fields(template) -> tuple:
+    """Fields that carry a unit, by convention ``unit`` or ``<field>_unit``."""
+    return tuple(f.name for f in template.fields
+                 if f.type == "string" and (f.name == "unit" or f.name.endswith("_unit")))
 
 
 def _safe(fn, result: ExtractionResult):
