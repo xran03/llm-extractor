@@ -59,17 +59,25 @@ work is driven, and it is a large difference on a folder of thousands of files.
 Install the asset matching your platform and Python version by URL:
 
 ```bash
+# Linux, CPython 3.12 (glibc 2.5 or newer, so any current distribution)
+pip install https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp312-cp312-manylinux1_x86_64.manylinux_2_5_x86_64.whl
+
+# Windows, CPython 3.13
 pip install https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp313-cp313-win_amd64.whl
 ```
+
+A wheel is built for one platform and one Python version, so the tag has to
+match on both counts — a Linux asset cannot be installed on Windows, and pip
+will say so rather than install something that cannot load.
 
 With the optional extras:
 
 ```bash
-pip install "llm_extractor[all] @ https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp313-cp313-win_amd64.whl"
+pip install "llm_extractor[all] @ https://github.com/xran03/llm-extractor/releases/download/v0.1.0/llm_extractor-0.1.0-cp312-cp312-manylinux1_x86_64.manylinux_2_5_x86_64.whl"
 ```
 
-Platforms without a published wheel install from source and run sequentially,
-which is fully supported. Check which core is active:
+Platforms and versions without a published wheel install from source and run
+sequentially, which is fully supported. Check which core is active:
 
 ```bash
 llm-extract check          # -> execution : accelerated (compiled) | sequential (sequential)
