@@ -33,7 +33,8 @@ class ColumnLayoutTest(unittest.TestCase):
     def test_provenance_first_audit_flags_last(self):
         columns = record_columns(self.template)
         self.assertEqual(columns[:2], ["doc_id", "doc_title"])
-        self.assertEqual(columns[-2:], ["_grounded", "_value_grounded"])
+        self.assertEqual(columns[-4:], ["_grounded", "_value_grounded",
+                                        "_unit_grounded", "_ungrounded"])
 
     def test_every_template_field_has_a_column(self):
         columns = set(record_columns(self.template))

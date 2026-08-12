@@ -182,7 +182,8 @@ class EndToEndTest(unittest.TestCase):
         header = (self.out / "records.csv").read_text(encoding="utf-8-sig").splitlines()[0]
         self.assertEqual(header.strip().split(","),
                          ["doc_id", "doc_title", "subject", "value", "source_span",
-                          "_grounded", "_value_grounded"])
+                          "_grounded", "_value_grounded", "_unit_grounded",
+                          "_ungrounded"])
 
     def test_document_json_has_records_ocr_and_aggregate(self):
         self._run("--api", "llmhub", "--ocr", "always")

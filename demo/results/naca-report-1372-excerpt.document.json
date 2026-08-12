@@ -78,7 +78,9 @@
       "source_span": "the copper wall is 3 inches thick, or 1=% foot",
       "doc_id": "naca-report-1372-excerpt",
       "_grounded": true,
-      "_value_grounded": true
+      "_value_grounded": true,
+      "_unit_grounded": true,
+      "_ungrounded": []
     },
     {
       "subject": "example 2 heating history",
@@ -97,7 +99,9 @@
       "source_span": "rising and falling over 5,000",
       "doc_id": "naca-report-1372-excerpt",
       "_grounded": true,
-      "_value_grounded": true
+      "_value_grounded": true,
+      "_unit_grounded": null,
+      "_ungrounded": []
     },
     {
       "subject": "example 3 adiabatic-wall temperature",
@@ -116,7 +120,9 @@
       "source_span": "following time series: Tam=1,365",
       "doc_id": "naca-report-1372-excerpt",
       "_grounded": true,
-      "_value_grounded": true
+      "_value_grounded": true,
+      "_unit_grounded": null,
+      "_ungrounded": []
     },
     {
       "subject": "example 3 wall",
@@ -135,7 +141,9 @@
       "source_span": "that the wall is 3 inches thick",
       "doc_id": "naca-report-1372-excerpt",
       "_grounded": true,
-      "_value_grounded": true
+      "_value_grounded": true,
+      "_unit_grounded": true,
+      "_ungrounded": []
     },
     {
       "subject": "example 3 computing interval",
@@ -154,7 +162,9 @@
       "source_span": "Solution (a) (thick-wall solution)",
       "doc_id": "naca-report-1372-excerpt",
       "_grounded": true,
-      "_value_grounded": null
+      "_value_grounded": null,
+      "_unit_grounded": null,
+      "_ungrounded": []
     }
   ],
   "figures": [

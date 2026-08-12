@@ -21,7 +21,10 @@ from pathlib import Path
 #: Provenance columns placed before the template's own fields.
 LEADING_COLUMNS = ("doc_id", "doc_title")
 #: Audit columns placed after them; these are the anti-hallucination flags.
-TRAILING_COLUMNS = ("_grounded", "_value_grounded")
+#: ``_ungrounded`` comes last because it is the one a reviewer reads: it names
+#: the fields that failed, so a flagged row can be checked without re-reading
+#: the whole record.
+TRAILING_COLUMNS = ("_grounded", "_value_grounded", "_unit_grounded", "_ungrounded")
 
 FIGURE_COLUMNS = (
     "doc_id", "doc_title", "image", "figure_type", "caption",
