@@ -1,0 +1,164 @@
+{
+  "name": "conjugate_titer",
+  "description": "Antibody titer measurements from conjugate-vaccine literature (pneumococcal, E. coli, GBS), keyed for later clustering by study batch, species and assay.",
+  "system_prompt": "You are a meticulous document data-extraction agent working on vaccine immunogenicity literature. You extract ONLY facts explicitly stated in the provided material. You never guess, never infer unstated values, and you always quote your evidence verbatim. If a field is unknown, use null - null is always better than a plausible guess.",
+  "instructions": "Extract every explicitly reported antibody TITER or CONCENTRATION measurement and emit ONE JSON array.\n\nONE RECORD = one value, for one group, for one serotype, at one timepoint, from one assay.\n\nRules that matter most:\n(A) NEVER merge OPA and IgG. They are different assays with different units and are never interchangeable. Set assay accordingly; if the text does not say which, use 'na' rather than guessing.\n(B) NEVER pack serotype, species, dose or timepoint into group_label. Each gets its own field, so records can be grouped later.\n(C) species is the animal or population actually assayed - infant/adult human, mouse, rabbit, or non-human primate. Record it even when it is only stated once in the methods.\n(D) study_batch identifies the experiment the record came from: the study/trial name, lot, or experiment label as written. Records sharing a batch will be clustered together, so copy it exactly and consistently.\n(E) Values below a detection limit are records with censoring='left_censored' and the limit as the value. An assay reported but not run is value=null with an explanation in notes.\n(F) value_source says where the number physically came from: running text, a table, or a figure. Be accurate - a figure reading is checked against the vision pass.\n(G) Report the number exactly as printed, including its unit. Do not convert units.",
+  "key_fields": ["assay", "serotype", "group_label", "timepoint", "species"],
+  "fields": [
+    {
+      "name": "pathogen",
+      "type": "string",
+      "description": "Organism the vaccine targets.",
+      "enum": ["pneumococcus", "e_coli", "gbs", "meningococcus", "hib", "other", "na"]
+    },
+    {
+      "name": "assay",
+      "type": "string",
+      "description": "Assay that produced the value. OPA and IgG must never be merged.",
+      "enum": ["opa", "igg", "igm", "iga", "elisa_total", "na"]
+    },
+    {
+      "name": "endpoint",
+      "type": "string",
+      "description": "Endpoint as written, e.g. 'GMT', 'GMC', 'OPA titer', 'IgG concentration'."
+    },
+    {
+      "name": "serotype",
+      "type": "string",
+      "description": "Serotype/serogroup exactly as written, e.g. '6B', '19A', 'III', 'O25b'. Null if not serotype-specific."
+    },
+    {
+      "name": "species",
+      "type": "string",
+      "description": "Species or population actually assayed.",
+      "enum": ["human_infant", "human_child", "human_adult", "human_elderly", "mouse", "rabbit", "nhp", "rat", "guinea_pig", "other", "na"]
+    },
+    {
+      "name": "species_detail",
+      "type": "string",
+      "description": "Strain or population as written, e.g. 'BALB/c', 'rhesus macaque', 'Japanese infants'."
+    },
+    {
+      "name": "study_batch",
+      "type": "string",
+      "description": "Study, trial, lot or experiment label as written. Used to cluster records from the same batch."
+    },
+    {
+      "name": "group_label",
+      "type": "string",
+      "description": "The single vaccine/control group this record describes. No serotype, dose, species or timepoint here."
+    },
+    {
+      "name": "n_subjects",
+      "type": "integer",
+      "description": "Number of subjects or animals contributing to this value, else null."
+    },
+    {
+      "name": "timepoint",
+      "type": "string",
+      "description": "Timepoint as written, e.g. 'day 28', 'post-dose 3', 'pre-vaccination'."
+    },
+    {
+      "name": "dose_number",
+      "type": "string",
+      "description": "Which dose this follows, e.g. 'dose 2', 'booster', 'primary series'."
+    },
+    {
+      "name": "dose_ug",
+      "type": "number",
+      "description": "Antigen dose in micrograms, else null."
+    },
+    {
+      "name": "value",
+      "type": "number",
+      "description": "The reported number, exactly as printed."
+    },
+    {
+      "name": "value_unit",
+      "type": "string",
+      "description": "Unit exactly as written, e.g. 'ug/mL', 'OPA titer', 'ELISA units/mL'."
+    },
+    {
+      "name": "value_kind",
+      "type": "string",
+      "description": "What kind of summary the number is.",
+      "enum": ["geometric_mean", "mean", "median", "individual", "fold_rise", "percent_responders", "na"]
+    },
+    {
+      "name": "ci_low",
+      "type": "number",
+      "description": "Lower confidence bound if reported, else null."
+    },
+    {
+      "name": "ci_high",
+      "type": "number",
+      "description": "Upper confidence bound if reported, else null."
+    },
+    {
+      "name": "censoring",
+      "type": "string",
+      "description": "Whether the value is a detection-limit bound.",
+      "enum": ["observed", "left_censored", "right_censored", "na"]
+    },
+    {
+      "name": "carrier",
+      "type": "string",
+      "description": "Carrier protein as written.",
+      "enum": ["crm197", "tt", "dt", "scp", "protein_d", "omp", "other", "na"]
+    },
+    {
+      "name": "valency",
+      "type": "integer",
+      "description": "Vaccine valency if stated, e.g. 13 for PCV13."
+    },
+    {
+      "name": "vaccine_name",
+      "type": "string",
+      "description": "Vaccine product or candidate name as written, e.g. 'PCV13', 'V114', 'MAPS'."
+    },
+    {
+      "name": "p_value",
+      "type": "string",
+      "description": "p-value as written, e.g. '<0.001', else null."
+    },
+    {
+      "name": "value_source",
+      "type": "string",
+      "description": "Where the number physically came from.",
+      "enum": ["text", "table", "figure", "na"]
+    },
+    {
+      "name": "figure",
+      "type": "string",
+      "description": "Figure or table label the value was read from, e.g. 'Figure 2A', 'Table 3'."
+    },
+    {
+      "name": "extraction_mode",
+      "type": "string",
+      "description": "How the record was obtained. Set by the pipeline, not the model: 'llm' = the text pass read it directly; 'ocr' = read from a figure or table image; 'multimodal' = the cheap passes could not resolve it alone and a stronger multi-input model was given the text, the figures and the tables together to work it out.",
+      "enum": ["multimodal", "llm", "ocr", "na"]
+    },
+    {
+      "name": "escalation_reason",
+      "type": "string",
+      "description": "Why the record needed the stronger multimodal model, e.g. 'table had no caption', 'value plotted but unlabelled', 'group named only in the body text'.",
+      "enum": ["unlabelled_table", "value_without_context", "context_without_value", "ambiguous_group", "conflicting_readings", "none", "na"]
+    },
+    {
+      "name": "modality_conflict",
+      "type": "string",
+      "description": "Set by the pipeline when the text layer and the figure reading disagree about the same measurement.",
+      "enum": ["none", "value_mismatch", "unit_mismatch", "na"]
+    },
+    {
+      "name": "notes",
+      "type": "string",
+      "description": "Anything needed to interpret the record, including why a value is missing."
+    },
+    {
+      "name": "source_span",
+      "type": "string",
+      "description": "REQUIRED verbatim quote (<=200 chars) from the document supporting this record."
+    }
+  ]
+}
