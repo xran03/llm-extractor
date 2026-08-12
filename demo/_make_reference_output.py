@@ -169,6 +169,43 @@ class StubProvider:
         return self.complete(messages, model, **kwargs).text
 
 
+# --- keep the committed output machine-independent --------------------------
+#: Fields whose value depends on when and where the run happened.
+UNSTABLE_FIELDS = {"generated_at": 0, "duration_s": 0.0}
+REPO_ROOT = DEMO.parent
+
+
+def _relativise(value: str) -> str:
+    """Rewrite any path pointing into this checkout to a repo-relative one."""
+    root = str(REPO_ROOT)
+    for prefix in (REPO_ROOT.as_uri() + "/", root + "\\", root + "/", root):
+        if value.startswith(prefix):
+            return value[len(prefix):].replace("\\", "/").lstrip("/")
+    return value
+
+
+def _stabilise(node):
+    if isinstance(node, dict):
+        return {key: (UNSTABLE_FIELDS[key] if key in UNSTABLE_FIELDS else _stabilise(value))
+                for key, value in node.items()}
+    if isinstance(node, list):
+        return [_stabilise(item) for item in node]
+    return _relativise(node) if isinstance(node, str) else node
+
+
+def stabilise_results(results: Path) -> None:
+    """Strip absolute paths and timings so the output regenerates identically.
+
+    Without this the reference artifacts carry the author's home directory and
+    a fresh timestamp, so every regeneration shows a diff and the committed
+    output is not reproducible on another machine.
+    """
+    for path in sorted(results.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(_stabilise(data), ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+
+
 def main() -> int:
     results = DEMO / "results"
     if results.exists():
@@ -185,9 +222,10 @@ def main() -> int:
     summary = run_job(
         settings, source_name="folder",
         source_params={"input_dir": str(DEMO), "extensions": [".pdf", ".png"]},
-        out_dir=str(results), resume=False,
+        out_dir=str(results), resume=False, job_id="demo",
     )
     shutil.rmtree(DEMO / ".cache", ignore_errors=True)
+    stabilise_results(results)
 
     print(f"documents {summary.ok}/{summary.total}   records {summary.records}   "
           f"figures {summary.figures}")

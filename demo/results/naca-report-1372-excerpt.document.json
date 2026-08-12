@@ -1,9 +1,9 @@
 {
   "doc_id": "naca-report-1372-excerpt",
   "title": "naca-report-1372-excerpt",
-  "uri": "file:///C:/Users/RANX03/workspace/llm-extractor/demo/naca-report-1372-excerpt.pdf",
+  "uri": "demo/naca-report-1372-excerpt.pdf",
   "source": "folder",
-  "source_path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\naca-report-1372-excerpt.pdf",
+  "source_path": "demo/naca-report-1372-excerpt.pdf",
   "metadata": {
     "relative_path": "naca-report-1372-excerpt.pdf",
     "bytes": 259976
@@ -12,11 +12,13 @@
     "template": "generic",
     "api": "stub",
     "model": "stub-model",
+    "format": "pdf",
+    "media_type": "document",
     "ocr_model": "stub-vision",
     "ocr_policy": "always",
     "ocr_executed": true,
-    "text_chars": 8310,
-    "duration_s": 1.145,
+    "text_chars": 8357,
+    "duration_s": 0.0,
     "prompt_tokens": 0,
     "completion_tokens": 0,
     "cached_calls": 0,
@@ -158,7 +160,7 @@
   "figures": [
     {
       "image": "naca-report-1372-excerpt-p001.png",
-      "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p001.png",
+      "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p001.png",
       "ocr": {
         "figure_type": "chart",
         "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
@@ -234,7 +236,7 @@
     },
     {
       "image": "naca-report-1372-excerpt-p002.png",
-      "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p002.png",
+      "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p002.png",
       "ocr": {
         "figure_type": "chart",
         "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
@@ -310,7 +312,7 @@
     },
     {
       "image": "naca-report-1372-excerpt-p003.png",
-      "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p003.png",
+      "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p003.png",
       "ocr": {
         "figure_type": "chart",
         "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
@@ -386,5 +388,5 @@
     }
   ],
   "errors": [],
-  "generated_at": 1786513025.6824236
+  "generated_at": 0
 }

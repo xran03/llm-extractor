@@ -1,7 +1,7 @@
 [
   {
     "image": "naca-report-1372-excerpt-p001.png",
-    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p001.png",
+    "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p001.png",
     "ocr": {
       "figure_type": "chart",
       "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
@@ -77,7 +77,7 @@
   },
   {
     "image": "naca-report-1372-excerpt-p002.png",
-    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p002.png",
+    "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p002.png",
     "ocr": {
       "figure_type": "chart",
       "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
@@ -153,7 +153,7 @@
   },
   {
     "image": "naca-report-1372-excerpt-p003.png",
-    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p003.png",
+    "path": "demo/.cache/media/pdf/naca-report-1372-excerpt/naca-report-1372-excerpt-p003.png",
     "ocr": {
       "figure_type": "chart",
       "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",

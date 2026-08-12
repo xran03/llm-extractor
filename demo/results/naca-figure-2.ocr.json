@@ -1,7 +1,7 @@
 [
   {
     "image": "naca-figure-2.png",
-    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\naca-figure-2.png",
+    "path": "demo/naca-figure-2.png",
     "ocr": {
       "figure_type": "chart",
       "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",

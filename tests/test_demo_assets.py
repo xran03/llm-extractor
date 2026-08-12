@@ -88,6 +88,21 @@ class DemoResultsTest(unittest.TestCase):
         self.assertEqual(stats["ungrounded"], 0)
         self.assertEqual(stats["values_ungrounded"], 0)
 
+    def test_reference_output_is_machine_independent(self):
+        """Committed artifacts must not carry the author's paths or timings."""
+        for path in sorted(RESULTS.glob("*.json")):
+            with self.subTest(artifact=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn(":\\", text, "absolute Windows path committed")
+                self.assertNotIn("file:///", text, "file URI committed")
+                self.assertNotIn("/home/", text, "absolute POSIX path committed")
+
+    def test_reference_output_has_no_wall_clock_values(self):
+        payload = json.loads(
+            (RESULTS / "naca-report-1372-excerpt.document.json").read_text(encoding="utf-8"))
+        self.assertEqual(payload["generated_at"], 0)
+        self.assertEqual(payload["stats"]["duration_s"], 0.0)
+
     def test_csv_columns_match_the_current_generic_template(self):
         from llm_extractor.serialize import record_columns
 
