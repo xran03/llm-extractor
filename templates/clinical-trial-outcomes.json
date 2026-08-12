@@ -1,0 +1,92 @@
+{
+  "name": "clinical_trial_outcomes",
+  "description": "Reported outcomes from a clinical study report or publication.",
+  "instructions": "Extract every explicitly reported outcome measurement and every reported comparison between arms. Capture negative and non-significant results too - they are data. One record per arm per outcome per timepoint. Never combine two arms into one record; use comparator for the arm being compared against.",
+  "key_fields": ["outcome", "arm", "timepoint"],
+  "fields": [
+    {
+      "name": "outcome",
+      "type": "string",
+      "description": "Name of the endpoint as written, e.g. 'overall survival'."
+    },
+    {
+      "name": "outcome_type",
+      "type": "string",
+      "description": "Role of the endpoint in the study.",
+      "enum": ["primary", "secondary", "exploratory", "safety", "na"]
+    },
+    {
+      "name": "arm",
+      "type": "string",
+      "description": "The single study arm or group this record describes."
+    },
+    {
+      "name": "comparator",
+      "type": "string",
+      "description": "Arm this one is compared against, else null."
+    },
+    {
+      "name": "timepoint",
+      "type": "string",
+      "description": "Timepoint as written, e.g. 'week 12', else null."
+    },
+    {
+      "name": "n_participants",
+      "type": "integer",
+      "description": "Number of participants contributing to this value."
+    },
+    {
+      "name": "value",
+      "type": "number",
+      "description": "Numeric result exactly as reported."
+    },
+    {
+      "name": "unit",
+      "type": "string",
+      "description": "Unit of the value as written, e.g. 'months', '%'."
+    },
+    {
+      "name": "statistic",
+      "type": "string",
+      "description": "What the number represents.",
+      "enum": ["mean", "median", "geometric_mean", "rate", "hazard_ratio", "odds_ratio", "risk_ratio", "count", "na"]
+    },
+    {
+      "name": "ci_low",
+      "type": "number",
+      "description": "Lower bound of the reported confidence interval, else null."
+    },
+    {
+      "name": "ci_high",
+      "type": "number",
+      "description": "Upper bound of the reported confidence interval, else null."
+    },
+    {
+      "name": "p_value",
+      "type": "string",
+      "description": "P-value as written, e.g. '<0.001', else null."
+    },
+    {
+      "name": "significant",
+      "type": "string",
+      "description": "Statistical significance if the source states it.",
+      "enum": ["yes", "no", "na"]
+    },
+    {
+      "name": "value_source",
+      "type": "string",
+      "description": "Where in the document the value was read from.",
+      "enum": ["text", "table", "figure", "na"]
+    },
+    {
+      "name": "notes",
+      "type": "string",
+      "description": "Qualifying context in the source's own words."
+    },
+    {
+      "name": "source_span",
+      "type": "string",
+      "description": "REQUIRED verbatim quote (<=200 chars) that contains the number."
+    }
+  ]
+}

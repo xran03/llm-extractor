@@ -1,0 +1,20 @@
+{
+  "job_id": "b91efebc259348a3",
+  "total": 2,
+  "ok": 2,
+  "failed": 0,
+  "skipped": 0,
+  "records": 5,
+  "figures": 4,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cached_calls": 0,
+  "duration_s": 1.24,
+  "output_dir": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\results",
+  "tables": {
+    "figures_csv": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\results\\figures.csv",
+    "records_csv": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\results\\records.csv"
+  },
+  "cache": {},
+  "errors": []
+}

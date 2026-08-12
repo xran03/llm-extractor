@@ -1,0 +1,373 @@
+# llm-extractor
+
+Folder in, JSON out. Point it at a directory of PDFs, XML, DOCX, PPTX and images
+and get back structured, evidence-grounded records — extracted by an LLM, with
+figure OCR, an on-disk response cache, and a way to re-check the cache later.
+
+```bash
+llm-extract -i ./docs -o ./out --api llmhub
+```
+
+---
+
+## Why it is built this way
+
+| Need | How it is met |
+|---|---|
+| Two API backends | `llmhub` speaks `/v1/chat/completions`; `aimodelhub` speaks the newer `/v1/responses`. One interface, one command. |
+| A table at the end | Records come out as **CSV** (one row per fact, columns fixed by the template) alongside lossless JSONL. |
+| Your own schema | An **extraction template** is a JSON file you write; it becomes the strict JSON Schema sent to the model and the columns of the CSV. |
+| Figures carry the numbers | The vision pass returns **structured JSON** (items, tables, axes), so it merges with text records instead of being prose. |
+| One answer per document | An aggregation agent reconciles the text pass and the OCR pass, flags conflicts, and never invents records. |
+| Cost | Every call is cached by content hash. Re-runs, added files and code iteration are free. |
+| Trust | Records carry `_grounded` / `_value_grounded`; `llm-extract audit` replays a sample of cached calls and scores them. |
+| Growth | Sources, providers and templates are registries with entry points — a patent or literature connector is a separate pip package. |
+| Frontends | `llm-extract serve` exposes jobs, progress (SSE) and results over HTTP. |
+
+---
+
+## Install
+
+```bash
+pip install llm-extractor              # core, zero dependencies
+pip install "llm-extractor[pdf]"       # + PDF text  (pypdf)
+pip install "llm-extractor[all]"       # + PDF page rendering for scanned PDFs (PyMuPDF)
+```
+
+From source:
+
+```bash
+git clone https://github.com/xran03/llm-extractor
+cd llm-extractor
+pip install -e ".[all]"
+```
+
+### Accelerated build
+
+Prebuilt wheels on the [releases page](https://github.com/xran03/llm-extractor/releases)
+bundle a compiled execution core that overlaps API calls across documents,
+chunks and figures. Same CLI, same output, same tests — it only changes how the
+work is driven, and it is a large difference on a folder of thousands of files.
+
+```bash
+# pick the wheel matching your platform and Python version
+pip install --find-links https://github.com/xran03/llm-extractor/releases/expanded_assets/v0.1.0 \
+            --upgrade llm-extractor
+```
+
+Installing from source or from a platform without a published wheel is fully
+supported and falls back to sequential execution. Check which core is active:
+
+```bash
+llm-extract check          # -> execution : accelerated | sequential
+```
+
+## Credentials
+
+Copy `.env.example` to `.env` and fill in the backend you use:
+
+```ini
+LLM_HUB_BASE_URL=https://your-gateway
+LLM_HUB_API_KEY=...
+# or OAuth2 client credentials, which mint a short-lived token:
+LLM_HUB_CLIENT_ID=...
+LLM_HUB_CLIENT_SECRET=...
+LLM_HUB_TOKEN_URL=...
+```
+
+Resolution order: `--api-key` → environment variable → nearest `.env` → paste.
+To paste a key instead of storing it, pass `-`:
+
+```bash
+llm-extract -i ./docs -o ./out --api-key -      # prompts, input hidden
+```
+
+Verify everything before spending tokens:
+
+```bash
+llm-extract check
+```
+
+## Usage
+
+```bash
+# extract a folder
+llm-extract -i ./docs -o ./out --api llmhub --model gpt-4.1
+
+# the newer Responses API instead
+llm-extract -i ./docs -o ./out --api aimodelhub
+
+# only some formats, capped, with a rate limit
+llm-extract -i ./docs -o ./out --extensions .pdf,.docx --limit 100 \
+            --rate-limit 300
+
+# force or disable the figure/vision pass
+llm-extract -i ./docs -o ./out --ocr always
+llm-extract -i ./docs -o ./out --ocr never --no-aggregate
+
+# an external database instead of a folder
+llm-extract run --source europepmc --param query="pneumococcal conjugate" \
+                --param max_records=50 -o ./out
+```
+
+Wrappers are provided for convenience: `./bin/llm-extract` and
+`./bin/llm-extract.ps1`.
+
+Supported inputs — the format is detected from **content**, so mislabelled and
+extension-less files still work:
+
+| Kind | Formats |
+|---|---|
+| Documents | `.pdf` `.docx` `.doc` `.odt` `.rtf` |
+| Slides | `.pptx` `.odp` |
+| Spreadsheets | `.xlsx` `.ods` `.csv` `.tsv` |
+| Text & markup | `.txt` `.md` `.rst` `.html` `.xml` (JATS/PMC) `.json` `.jsonl` |
+| Mail & books | `.eml` `.mbox` `.epub` |
+| Images | `.png` `.jpg` `.jpeg` `.gif` `.webp` `.tif` `.tiff` `.bmp` |
+
+Each format declares its own path rather than the pipeline checking extensions:
+whether it has a text layer, and where its figures come from (the file itself,
+media embedded in the container, or rendered pages). So an image and a scanned
+PDF both route to the vision pass, tables in `.docx`/`.xlsx`/`.ods` keep their
+rows intact, and PowerPoint speaker notes are read alongside slide text.
+
+```bash
+llm-extract formats          # every format, its kind and how it is processed
+```
+
+Adding a format is one entry in `formats.BUILTIN` plus a reader; nothing
+downstream changes.
+
+## Output
+
+Per document, plus run-level tables:
+
+```
+out/
+  records.csv                  every record from every document  <- start here
+  figures.csv                  every value read out of a figure
+  summary.json                 run totals, tokens, cache statistics
+  <doc>.records.csv            the same rows, one file per document
+  <doc>.records.jsonl          lossless records (nested values, audit flags)
+  <doc>.ocr.json               structured vision output per figure
+  <doc>.figures.csv            figure readings as a table
+  <doc>.document.json          records + figures + aggregate + stats
+```
+
+`records.csv` is the analysis artifact: one row per fact, columns fixed by the
+template, written with a UTF-8 BOM so Excel renders `µg/mL` correctly. JSONL is
+the lossless machine format. Choose with `--format jsonl|csv|both` (default
+`both`).
+
+A record always carries its evidence and two audit flags:
+
+```json
+{
+  "subject": "group A",
+  "attribute": "antibody concentration",
+  "value": 12.5,
+  "unit": "µg/mL",
+  "direction": "higher",
+  "significant": "yes",
+  "p_value": "<0.01",
+  "source_span": "Group A reached 12.5 ug/mL, higher than group B (p<0.01).",
+  "doc_id": "report",
+  "_grounded": true,
+  "_value_grounded": true
+}
+```
+
+`_grounded` means the quoted span was found in the document. `_value_grounded`
+means the number's digits appear inside that span — a value that fails this
+check was fabricated, and it is flagged rather than silently trusted.
+
+## Try it
+
+[`demo/`](demo/) ships a public-domain scanned report, one chart cropped out of
+it, and the output both produce — including a value the text layer does not
+contain and only the vision pass recovers.
+
+```bash
+llm-extract -i ./demo -o ./demo/out --ocr always
+```
+
+See [demo/README.md](demo/README.md).
+
+## Schemas you define
+
+A template is the JSON contract: fields, types, enums, prompt, and the strict
+JSON Schema sent to the model. Two ship built in — `generic` (subject /
+attribute / value / evidence, works on anything) and `immunogenicity` — and
+anything else is a JSON file you write.
+
+```bash
+llm-extract templates                          # list built-ins
+llm-extract templates --show generic           # print one with its JSON schema
+llm-extract templates --init my-template.json  # scaffold a valid starting point
+llm-extract templates --validate my-template.json
+llm-extract -i ./docs -o ./out --template my-template.json
+```
+
+Minimal template:
+
+```json
+{
+  "name": "patent_claims",
+  "instructions": "Extract each claim. Preserve the claim's own wording.",
+  "key_fields": ["claim_number"],
+  "fields": [
+    {"name": "claim_number", "type": "integer", "description": "Claim number"},
+    {"name": "claim_type",   "type": "string",  "description": "Claim kind",
+     "enum": ["independent", "dependent", "na"]},
+    {"name": "claim_text",   "type": "string",  "description": "Claim wording, verbatim"},
+    {"name": "source_span",  "type": "string",  "description": "Verbatim evidence"}
+  ]
+}
+```
+
+Rules the validator enforces, with a message naming the offending field:
+
+- field `type` is one of `string`, `number`, `integer`, `boolean`;
+- `enum` is a non-empty list, and only on string fields;
+- `key_fields` must name fields that exist;
+- `doc_id`, `doc_title`, `_grounded`, `_value_grounded` are reserved;
+- a `source_span` field is **required** — it is what makes a record checkable.
+
+Worked examples live in [`templates/`](templates/). The CSV columns follow the
+template, so changing the schema changes the table.
+
+A frontend can send a schema inline instead of shipping a file:
+
+```bash
+curl -X POST localhost:8080/v1/templates/validate \
+  -d '{"template": {"name": "t", "fields": [...]}}'
+
+curl -X POST localhost:8080/v1/jobs \
+  -d '{"source": "folder", "params": {"input_dir": "./docs"},
+       "template": {"name": "t", "fields": [...]}}'
+```
+
+## Caching and cost
+
+```bash
+llm-extract cache stats            # entries, bytes, hit rate, tokens saved
+llm-extract cache entries --stage ocr
+llm-extract cache clear
+```
+
+The cache key covers backend, model, full message content (images included),
+temperature, token budget and schema — so any real change misses, and nothing
+else does. Documents unchanged since a previous successful run are skipped
+entirely (`--no-resume` to force).
+
+## Auditing what was cached
+
+A cache nobody checks is a liability. Each entry stores its original request, so
+it can be replayed:
+
+```bash
+# replay 25 sampled calls and score them against what was cached
+llm-extract audit --n 25 --strategy oldest
+
+# cross-check with a stronger referee model, drop whatever fails
+llm-extract audit --n 50 --referee-model gpt-4.1 --invalidate-drifted -o audit.json
+```
+
+Sampling strategies: `random`, `oldest`, `newest`, `largest`, `unverified`.
+Each entry gets a verdict (`confirmed` / `drifted` / `suspect` / `error`) written
+back to the index, and the report includes a Wilson 95% confidence interval so a
+small sample is not over-read.
+
+## HTTP API
+
+```bash
+llm-extract serve --port 8080            # optional: --token <shared secret>
+```
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | liveness |
+| GET | `/v1/capabilities` | providers, sources (+ parameters), templates |
+| GET | `/v1/templates` | built-in templates + a starter schema |
+| GET | `/v1/templates/{name}` | template with its JSON Schema |
+| POST | `/v1/templates/validate` | check a user-authored schema |
+| POST | `/v1/jobs` | start a job, returns `202` + `job_id` |
+| GET | `/v1/jobs/{id}` | status, counters, progress |
+| GET | `/v1/jobs/{id}/tasks` | per-document rows |
+| GET | `/v1/jobs/{id}/events` | Server-Sent Events progress stream |
+| GET | `/v1/documents/{doc_id}` | aggregated document JSON |
+| GET/DELETE | `/v1/cache` | statistics / clear |
+| POST | `/v1/cache/audit` | run an audit |
+
+```bash
+curl -X POST localhost:8080/v1/jobs -H 'Content-Type: application/json' \
+  -d '{"source":"folder","params":{"input_dir":"./docs"},"api":"llmhub"}'
+```
+
+Capabilities are generated from the registries, so an installed plugin shows up
+in the API — and in a frontend's forms — without touching the service code.
+
+## Architecture
+
+```
+sources/       where documents come from   folder | rest | patents | literature
+    |
+ingest         format readers              pdf xml docx pptx png jpeg txt md html
+    |
+pipeline       per document:  text extraction  ->  figure OCR  ->  aggregation agent
+    |          every model call goes through providers/ and the cache
+runner         scheduler (rate limit, retry, isolation) + job store + event bus
+    |
+cli / service  the CLI and the HTTP API drive the same runner
+```
+
+Extension points, all registries with entry-point discovery:
+
+| Axis | Registry | Entry point group |
+|---|---|---|
+| API backends | `providers.BACKENDS` | — |
+| Document sources | `sources.SOURCES` | `llm_extractor.sources` |
+| Templates | `templates.BUILTIN_TEMPLATES` | — (or a JSON file) |
+
+Adding a patent database in a separate package:
+
+```python
+from llm_extractor.sources import SOURCES, RestSource
+
+@SOURCES.register("my-patents")
+class MyPatents(RestSource):
+    name = "my-patents"
+    description = "Internal patent store"
+    defaults = {
+        "base_url": "https://patents.internal",
+        "path": "/api/search",
+        "records_path": "hits",
+        "id_field": "docId",
+        "text_fields": ["abstract", "claims"],
+        "auth": "bearer",
+        "auth_env": "PATENT_API_KEY",
+    }
+```
+
+```toml
+[project.entry-points."llm_extractor.sources"]
+my-patents = "my_package:MyPatents"
+```
+
+It is then available to the CLI (`--source my-patents`) and the HTTP API with no
+changes here.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+python -m unittest discover -s tests -t .
+```
+
+356 offline tests: no network, no credentials. Model calls run through fakes and
+the end-to-end suite drives the real CLI against a local fake gateway that
+implements both API styles.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

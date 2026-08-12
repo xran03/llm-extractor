@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-extractor"
+version = "0.1.0"
+description = "Folder-in / JSON-out document data extraction driven by an LLM API (LLMHub chat-completions or AI Model Hub responses), with vision OCR and an on-disk response cache."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "xran03" }]
+keywords = ["llm", "extraction", "ocr", "pdf", "docx", "pptx", "json"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Text Processing",
+]
+# The core runtime is stdlib-only on purpose: no third-party package is needed
+# to talk to either API. Format support is opt-in via extras.
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdf>=4.0"]
+render = ["PyMuPDF>=1.24"]
+yaml = ["PyYAML>=6.0"]
+all = ["pypdf>=4.0", "PyMuPDF>=1.24", "PyYAML>=6.0"]
+dev = ["pypdf>=4.0", "PyYAML>=6.0", "build>=1.2"]
+
+[project.scripts]
+llm-extract = "llm_extractor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xran03/llm-extractor"
+Issues = "https://github.com/xran03/llm-extractor/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# The accelerated execution core ships as a compiled extension inside the
+# wheel; source installs simply fall back to the sequential implementation.
+llm_extractor = ["py.typed", "*.pyd", "*.so"]

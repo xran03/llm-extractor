@@ -1,0 +1,230 @@
+[
+  {
+    "image": "naca-report-1372-excerpt-p001.png",
+    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p001.png",
+    "ocr": {
+      "figure_type": "chart",
+      "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
+      "axis_x": "Time, sec",
+      "axis_y": "Wall surface temperature, deg F",
+      "items": [
+        {
+          "label": "outer surface at t=2 s",
+          "series": "Outer surface (present method)",
+          "value": 40,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=4 s",
+          "series": "Outer surface (present method)",
+          "value": 120,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=6 s",
+          "series": "Outer surface (present method)",
+          "value": 217,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=10 s",
+          "series": "Outer surface (present method)",
+          "value": 300,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "curve plateau"
+        },
+        {
+          "label": "inner surface at t=6 s",
+          "series": "Inner surface (present method)",
+          "value": 185,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "inner surface at t=10 s",
+          "series": "Inner surface (present method)",
+          "value": 297,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "converges with the outer surface"
+        }
+      ],
+      "tables": [],
+      "text_blocks": [
+        "Outer surface | Present method; d=1/2 sec",
+        "Inner surface | Present method; d=1/2 sec",
+        "Outer surface | Exact theory",
+        "Inner surface | Exact theory",
+        "Time, sec",
+        "Wall surface temperature, deg F"
+      ],
+      "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  },
+  {
+    "image": "naca-report-1372-excerpt-p002.png",
+    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p002.png",
+    "ocr": {
+      "figure_type": "chart",
+      "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
+      "axis_x": "Time, sec",
+      "axis_y": "Wall surface temperature, deg F",
+      "items": [
+        {
+          "label": "outer surface at t=2 s",
+          "series": "Outer surface (present method)",
+          "value": 40,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=4 s",
+          "series": "Outer surface (present method)",
+          "value": 120,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=6 s",
+          "series": "Outer surface (present method)",
+          "value": 217,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=10 s",
+          "series": "Outer surface (present method)",
+          "value": 300,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "curve plateau"
+        },
+        {
+          "label": "inner surface at t=6 s",
+          "series": "Inner surface (present method)",
+          "value": 185,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "inner surface at t=10 s",
+          "series": "Inner surface (present method)",
+          "value": 297,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "converges with the outer surface"
+        }
+      ],
+      "tables": [],
+      "text_blocks": [
+        "Outer surface | Present method; d=1/2 sec",
+        "Inner surface | Present method; d=1/2 sec",
+        "Outer surface | Exact theory",
+        "Inner surface | Exact theory",
+        "Time, sec",
+        "Wall surface temperature, deg F"
+      ],
+      "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  },
+  {
+    "image": "naca-report-1372-excerpt-p003.png",
+    "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\.cache\\media\\pdf\\naca-report-1372-excerpt\\naca-report-1372-excerpt-p003.png",
+    "ocr": {
+      "figure_type": "chart",
+      "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
+      "axis_x": "Time, sec",
+      "axis_y": "Wall surface temperature, deg F",
+      "items": [
+        {
+          "label": "outer surface at t=2 s",
+          "series": "Outer surface (present method)",
+          "value": 40,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=4 s",
+          "series": "Outer surface (present method)",
+          "value": 120,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=6 s",
+          "series": "Outer surface (present method)",
+          "value": 217,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "outer surface at t=10 s",
+          "series": "Outer surface (present method)",
+          "value": 300,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "curve plateau"
+        },
+        {
+          "label": "inner surface at t=6 s",
+          "series": "Inner surface (present method)",
+          "value": 185,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "read from the curve"
+        },
+        {
+          "label": "inner surface at t=10 s",
+          "series": "Inner surface (present method)",
+          "value": 297,
+          "value_text": null,
+          "unit": "deg F",
+          "note": "converges with the outer surface"
+        }
+      ],
+      "tables": [],
+      "text_blocks": [
+        "Outer surface | Present method; d=1/2 sec",
+        "Inner surface | Present method; d=1/2 sec",
+        "Outer surface | Exact theory",
+        "Inner surface | Exact theory",
+        "Time, sec",
+        "Wall surface temperature, deg F"
+      ],
+      "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  }
+]

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Convenience wrapper: llm-extract with sensible defaults.
+#
+#   ./bin/llm-extract -i ./docs -o ./out --api llmhub
+#
+# Prefers an activated virtualenv, then a local .venv, then the console script
+# installed by `pip install llm-extractor`.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -x "${here}/.venv/bin/llm-extract" ]]; then
+  exec "${here}/.venv/bin/llm-extract" "$@"
+elif command -v llm-extract >/dev/null 2>&1; then
+  exec llm-extract "$@"
+else
+  exec python -m llm_extractor "$@"
+fi

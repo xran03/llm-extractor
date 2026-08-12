@@ -1,0 +1,142 @@
+{
+  "doc_id": "naca-figure-2",
+  "title": "naca-figure-2",
+  "uri": "file:///C:/Users/RANX03/workspace/llm-extractor/demo/naca-figure-2.png",
+  "source": "folder",
+  "source_path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\naca-figure-2.png",
+  "metadata": {
+    "relative_path": "naca-figure-2.png",
+    "bytes": 119619
+  },
+  "stats": {
+    "template": "generic",
+    "api": "stub",
+    "model": "stub-model",
+    "ocr_model": "stub-vision",
+    "ocr_policy": "always",
+    "ocr_executed": true,
+    "text_chars": 0,
+    "duration_s": 0.005,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "cached_calls": 0,
+    "records": 0,
+    "grounded": 0,
+    "ungrounded": 0,
+    "numeric_records": 0,
+    "values_grounded": 0,
+    "values_ungrounded": 0,
+    "ocr_figures": 1,
+    "ocr_items": 6,
+    "ocr_tables": 0,
+    "ocr_numeric_items": 6
+  },
+  "aggregate": {
+    "summary": "NACA Report 1372 presents a method for computing transient temperatures of thick walls from an arbitrary history of adiabatic-wall temperature and heat-transfer coefficient. The excerpt works through examples with 1/2-inch and 3-inch copper walls and compares the method against exact theory.",
+    "key_findings": [
+      "Example 1(b) repeats example 1(a) with a 3-inch copper wall.",
+      "The assigned adiabatic-wall temperature rises and falls over 5,000 degrees in 10 seconds.",
+      "Example 3 drives the solution with a tabulated Taw series starting at 1,365 degrees."
+    ],
+    "figure_insights": [
+      {
+        "image": "naca-figure-2.png",
+        "finding": "Outer-surface temperature reaches about 300 deg F at 10 s",
+        "value": 300,
+        "unit": "deg F"
+      },
+      {
+        "image": "naca-figure-2.png",
+        "finding": "Inner and outer surface curves converge by 10 s",
+        "value": 297,
+        "unit": "deg F"
+      }
+    ],
+    "conflicts": [],
+    "coverage_gaps": [
+      "The computing interval is written as a fraction, so no numeric value appears in the text layer.",
+      "Axis labels and figure captions are absent from the text layer and were recovered only by the vision pass."
+    ]
+  },
+  "records": [],
+  "figures": [
+    {
+      "image": "naca-figure-2.png",
+      "path": "C:\\Users\\RANX03\\workspace\\llm-extractor\\demo\\naca-figure-2.png",
+      "ocr": {
+        "figure_type": "chart",
+        "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
+        "axis_x": "Time, sec",
+        "axis_y": "Wall surface temperature, deg F",
+        "items": [
+          {
+            "label": "outer surface at t=2 s",
+            "series": "Outer surface (present method)",
+            "value": 40,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "read from the curve"
+          },
+          {
+            "label": "outer surface at t=4 s",
+            "series": "Outer surface (present method)",
+            "value": 120,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "read from the curve"
+          },
+          {
+            "label": "outer surface at t=6 s",
+            "series": "Outer surface (present method)",
+            "value": 217,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "read from the curve"
+          },
+          {
+            "label": "outer surface at t=10 s",
+            "series": "Outer surface (present method)",
+            "value": 300,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "curve plateau"
+          },
+          {
+            "label": "inner surface at t=6 s",
+            "series": "Inner surface (present method)",
+            "value": 185,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "read from the curve"
+          },
+          {
+            "label": "inner surface at t=10 s",
+            "series": "Inner surface (present method)",
+            "value": 297,
+            "value_text": null,
+            "unit": "deg F",
+            "note": "converges with the outer surface"
+          }
+        ],
+        "tables": [],
+        "text_blocks": [
+          "Outer surface | Present method; d=1/2 sec",
+          "Inner surface | Present method; d=1/2 sec",
+          "Outer surface | Exact theory",
+          "Inner surface | Exact theory",
+          "Time, sec",
+          "Wall surface temperature, deg F"
+        ],
+        "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
+      },
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached": false
+      }
+    }
+  ],
+  "errors": [],
+  "generated_at": 1786513024.5159838
+}

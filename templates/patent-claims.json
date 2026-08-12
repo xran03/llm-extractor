@@ -1,0 +1,45 @@
+{
+  "name": "patent_claims",
+  "description": "Independent and dependent claims from a patent document.",
+  "instructions": "Extract every claim stated in the document as a separate record. Preserve the claim's own wording; do not paraphrase or summarise. A dependent claim records the claim number it depends on. Do not infer claim scope that is not written.",
+  "key_fields": ["claim_number"],
+  "fields": [
+    {
+      "name": "claim_number",
+      "type": "integer",
+      "description": "The claim number as printed, e.g. 1."
+    },
+    {
+      "name": "claim_type",
+      "type": "string",
+      "description": "Whether the claim stands alone or refers to another claim.",
+      "enum": ["independent", "dependent", "na"]
+    },
+    {
+      "name": "depends_on",
+      "type": "integer",
+      "description": "For a dependent claim, the claim number it refers to, else null."
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "description": "Statutory category of the claim.",
+      "enum": ["apparatus", "method", "composition", "system", "use", "na"]
+    },
+    {
+      "name": "claim_text",
+      "type": "string",
+      "description": "The claim wording, verbatim."
+    },
+    {
+      "name": "key_limitation",
+      "type": "string",
+      "description": "The limitation that distinguishes this claim, in the source's words."
+    },
+    {
+      "name": "source_span",
+      "type": "string",
+      "description": "REQUIRED verbatim quote (<=200 chars) supporting this record."
+    }
+  ]
+}

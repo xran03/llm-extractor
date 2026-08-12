@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Native build products
+*.c
+*.pyd
+*.so
+*.o
+*.obj
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Runtime artifacts
+outputs/
+out/
+.llm_cache/
+*.records.jsonl
+*.records.csv
+*.figures.csv
+*.ocr.json
+*.document.json
+manifest.jsonl
+summary.json
+
+# ...but the demo's reference output is part of the repository
+!demo/results/**
+!demo/results/
+
+# Source documents / extracted data must stay local
+inputs/
+docs_in/
+*.extracted.*
+*.extracted_files/
+demo/out/
+demo/.cache/
+
+# Local overrides
+config.local.yaml
+pricing.local.yaml
+
+# OS
+.DS_Store
+Thumbs.db
