@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .credentials import get_env, resolve_secret
+from .credstore import stored_api_key, stored_base_url
 
 DEFAULT_API = "llmhub"
 DEFAULT_MODEL = "gpt-4.1"
@@ -88,7 +89,9 @@ def build_settings(api: str | None = None, *, base_url: str | None = None,
     prefix = ENV_PREFIX.get(api, api.upper().replace("-", "_"))
 
     settings = Settings(api=api)
-    settings.base_url = (base_url or get_env(f"{prefix}_BASE_URL")).rstrip("/")
+    settings.base_url = (
+        base_url or get_env(f"{prefix}_BASE_URL") or stored_base_url(api)
+    ).rstrip("/")
     settings.client_id = get_env(f"{prefix}_CLIENT_ID")
     settings.client_secret = get_env(f"{prefix}_CLIENT_SECRET")
     settings.token_url = get_env(f"{prefix}_TOKEN_URL")
@@ -101,6 +104,7 @@ def build_settings(api: str | None = None, *, base_url: str | None = None,
         label=f"{api} API key",
         allow_prompt=allow_prompt and not has_oauth,
         prompter=prompter,
+        fallback=None if has_oauth else (lambda: stored_api_key(api)),
     )
 
     settings.model = model or get_env("LLM_EXTRACTOR_MODEL") or DEFAULT_MODEL

@@ -22,7 +22,9 @@ class FolderSource(Source):
     def __init__(self, input_dir, extensions=None, limit: int = 0, **params):
         super().__init__(input_dir=str(input_dir), extensions=extensions,
                          limit=limit, **params)
-        self.input_dir = Path(input_dir)
+        # Absolute from the start: `Path.as_uri()` rejects relative paths, and
+        # `-i docs` (or `-i ~/docs`) is what people actually type.
+        self.input_dir = Path(input_dir).expanduser().resolve()
         self.extensions = extensions
         self.limit = int(limit or 0)
 

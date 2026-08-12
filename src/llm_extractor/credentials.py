@@ -13,6 +13,7 @@ Secrets are never written to disk by this module and never logged.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 PROMPT_SENTINEL = "-"
@@ -72,22 +73,33 @@ def get_env(name: str, default: str = "") -> str:
 
 
 def prompt_secret(label: str) -> str:
-    """Prompt once for a pasted secret (hidden input, falls back to plain input)."""
+    """Prompt once for a pasted secret.
+
+    Input is hidden whenever the terminal supports it. When it does not, say so
+    *before* the user pastes: a key echoed into the scrollback of a shared
+    machine is precisely what this tool exists to avoid.
+    """
     import getpass
 
     try:
-        value = getpass.getpass(f"Paste {label} (input hidden): ")
-    except Exception:  # pragma: no cover - non-interactive terminals
-        value = input(f"Paste {label}: ")
-    return value.strip()
+        return getpass.getpass(f"Paste {label} (input hidden): ").strip()
+    except Exception:  # pragma: no cover - terminal without hidden input
+        print(f"warning: this terminal cannot hide input, so the {label} "
+              f"will be visible on screen", file=sys.stderr)
+        return input(f"Paste {label}: ").strip()
 
 
 def resolve_secret(cli_value: str | None, env_names, label: str,
-                   allow_prompt: bool = False, prompter=None) -> str:
-    """Resolve one secret from CLI / env / .env / interactive paste.
+                   allow_prompt: bool = False, prompter=None, fallback=None) -> str:
+    """Resolve one secret from CLI / env / .env / saved store / interactive paste.
 
     Passing ``-`` as the CLI value forces the paste prompt, which is the
     "copy-paste" path for users who do not keep a ``.env`` file.
+
+    ``fallback`` is a zero-argument callable consulted after the environment
+    and before prompting; it is how the saved credential store participates
+    without letting a stale saved key shadow an explicit flag or a real
+    environment variable.
     """
     prompter = prompter or prompt_secret
     if cli_value == PROMPT_SENTINEL:
@@ -98,6 +110,10 @@ def resolve_secret(cli_value: str | None, env_names, label: str,
         value = get_env(name)
         if value:
             return value
+    if fallback is not None:
+        saved = (fallback() or "").strip()
+        if saved:
+            return saved
     if allow_prompt:
         return prompter(label)
     return ""

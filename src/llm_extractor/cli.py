@@ -19,14 +19,18 @@ from . import __version__
 from ._exec import BACKEND as EXEC_BACKEND, BACKEND_DETAIL as EXEC_BACKEND_DETAIL
 from .bus import (DOC_COMPLETED, DOC_FAILED, DOC_SKIPPED, EventBus, JOB_COMPLETED,
                   JOB_STARTED)
-from .credentials import PROMPT_SENTINEL, env_file_in_use, load_env_file
+from .credentials import PROMPT_SENTINEL, env_file_in_use, load_env_file, prompt_secret
+from .credstore import (delete_credentials, describe_store, save_credentials,
+                        store_path, stored_base_url)
 from .ingest import describe_formats
+from .providers import ProviderError
 from .settings import DEFAULT_CACHE_DIR, build_settings
 from .sources import SOURCES, available_sources
 from .templates import (BUILTIN_TEMPLATES, STARTER_TEMPLATE, TemplateError,
                         load_template)
 
-SUBCOMMANDS = {"run", "sources", "formats", "models", "check", "cache", "audit", "serve", "templates"}
+SUBCOMMANDS = {"run", "sources", "formats", "models", "check", "cache", "audit", "serve",
+               "templates", "login", "logout"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
+            "  llm-extract login\n"
             "  llm-extract -i ./docs -o ./out --api llmhub\n"
             "  llm-extract -i ./docs -o ./out --api aimodelhub --template immunogenicity\n"
             "  llm-extract run --source europepmc --param query='pneumococcal conjugate' -o ./out\n"
@@ -111,6 +116,16 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("-o", "--output", default="out", help="artifact directory")
     serve.add_argument("--token", default="", help="require this bearer token")
+
+    login = sub.add_parser("login", help="paste an API key once and save it securely")
+    _add_common(login)
+    login.add_argument("--no-verify", action="store_true",
+                       help="save without checking the key against the gateway")
+
+    logout = sub.add_parser("logout", help="forget the saved API key")
+    _add_common(logout)
+    logout.add_argument("--all", action="store_true",
+                        help="forget every backend, not just the selected one")
     return parser
 
 
@@ -157,6 +172,19 @@ def settings_from_args(args, allow_prompt: bool = False):
     )
 
 
+def _interactive() -> bool:
+    """True when a human is present to answer a prompt.
+
+    Scripts, CI and piped invocations must keep failing fast with a message
+    rather than blocking forever on a prompt nobody will ever see, so every
+    implicit prompt is gated on this.
+    """
+    try:
+        return bool(sys.stdin.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
 def parse_params(pairs) -> dict:
     """Parse ``--param key=value`` into a dict, decoding JSON values when possible."""
     params: dict = {}
@@ -180,7 +208,7 @@ def cmd_run(args) -> int:
         print("error: -i/--input is required for the folder source", file=sys.stderr)
         return 2
 
-    settings = settings_from_args(args)
+    settings = settings_from_args(args, allow_prompt=_interactive())
     template = load_template(settings.template)
     source_params = parse_params(args.param)
 
@@ -294,6 +322,7 @@ def cmd_models(args) -> int:
 def cmd_check(args) -> int:
     settings = settings_from_args(args)
     print(f"env file  : {env_file_in_use() or '(none found)'}")
+    print(f"saved key : {describe_store()}")
     for key, value in settings.describe().items():
         print(f"{key:<10}: {value}")
     print(f"sources   : {', '.join(SOURCES.names())}")
@@ -301,12 +330,12 @@ def cmd_check(args) -> int:
     print(f"execution : {EXEC_BACKEND} ({EXEC_BACKEND_DETAIL})")
 
     if not settings.base_url:
-        print(f"\nnot configured: set {settings.env_prefix}_BASE_URL in .env "
-              f"(see .env.example) or pass --base-url", file=sys.stderr)
+        print(f"\nnot configured: run 'llm-extract login' to paste a key, or set "
+              f"{settings.env_prefix}_BASE_URL in .env (see .env.example)", file=sys.stderr)
         return 1
     if not (settings.api_key or (settings.client_id and settings.client_secret)):
-        print(f"\nnot configured: no credentials. Set {settings.env_prefix}_API_KEY "
-              f"in .env, pass --api-key, or paste one with --api-key -",
+        print(f"\nnot configured: no credentials. Run 'llm-extract login' to paste a key, "
+              f"or set {settings.env_prefix}_API_KEY in .env",
               file=sys.stderr)
         return 1
 
@@ -320,6 +349,79 @@ def cmd_check(args) -> int:
     except Exception as exc:
         print(f"\nconnectivity: FAILED - {exc}", file=sys.stderr)
         return 1
+
+
+def cmd_login(args) -> int:
+    """Paste a key once, verify it, and save it for every later run.
+
+    Verification happens *before* saving, so a mistyped or expired key is
+    reported here — while the user still has it on the clipboard — instead of
+    failing later inside an extraction run.
+    """
+    from .providers import build_provider
+
+    if getattr(args, "env_file", None):
+        load_env_file(args.env_file, override=True)
+
+    # Resolve the backend and any base URL already configured. The key found
+    # here is deliberately ignored: this command exists to replace it.
+    probe = build_settings(api=args.api, base_url=args.base_url, cache_enabled=False)
+    api, base_url = probe.api, probe.base_url
+
+    if not base_url:
+        if not _interactive():
+            print(f"error: no base URL for '{api}'. Pass --base-url https://your-gateway",
+                  file=sys.stderr)
+            return 2
+        base_url = input(f"Gateway base URL for {api} (e.g. https://your-gateway): ").strip()
+        if not base_url:
+            print("error: a base URL is required", file=sys.stderr)
+            return 2
+
+    supplied = getattr(args, "api_key", None)
+    if supplied and supplied != PROMPT_SENTINEL:
+        key = supplied.strip()
+    elif _interactive() or supplied == PROMPT_SENTINEL:
+        key = prompt_secret(f"{api} API key")
+    else:
+        print("error: no terminal to paste into. Pass --api-key, or run this "
+              "in an interactive shell.", file=sys.stderr)
+        return 2
+    if not key:
+        print("error: no key entered; nothing was saved", file=sys.stderr)
+        return 2
+
+    settings = build_settings(api=api, base_url=base_url, api_key=key, cache_enabled=False)
+    if not args.no_verify:
+        try:
+            models = build_provider(settings).list_models()
+        except Exception as exc:
+            print(f"\nnot saved: the gateway rejected this key - {exc}", file=sys.stderr)
+            return 1
+        print(f"verified: {len(models)} models visible")
+
+    path = save_credentials(api, api_key=key, base_url=base_url)
+    print(f"saved    : {path} (readable only by you)")
+    # Name the backend in the hint only when it is not the one picked up by
+    # default, so the suggested command works as printed.
+    default_api = build_settings(cache_enabled=False).api
+    suffix = "" if api == default_api else f" --api {api}"
+    print(f"\nYou are ready. Try:\n  llm-extract -i ./docs -o ./out{suffix}")
+    return 0
+
+
+def cmd_logout(args) -> int:
+    """Forget a saved key."""
+    if args.all:
+        removed = delete_credentials()
+        print("removed every saved credential" if removed else "nothing was saved")
+        return 0
+    api = build_settings(api=args.api, cache_enabled=False).api
+    if delete_credentials(api):
+        print(f"removed the saved credentials for {api} ({store_path()})")
+    else:
+        print(f"nothing saved for {api}")
+    return 0
 
 
 def cmd_cache(args) -> int:
@@ -400,6 +502,8 @@ COMMANDS = {
     "cache": cmd_cache,
     "audit": cmd_audit,
     "serve": cmd_serve,
+    "login": cmd_login,
+    "logout": cmd_logout,
 }
 
 
@@ -440,6 +544,12 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
+    except ProviderError as exc:
+        # Almost always "no key yet" or "no gateway yet": point at the fix
+        # instead of letting a traceback reach a non-technical user.
+        print(f"error: {exc}\n\nIf you have not set this up yet, run:\n"
+              f"  llm-extract login", file=sys.stderr)
+        return 2
     except (TemplateError, ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
