@@ -358,8 +358,6 @@ def cmd_login(args) -> int:
     reported here — while the user still has it on the clipboard — instead of
     failing later inside an extraction run.
     """
-    from .providers import build_provider
-
     if getattr(args, "env_file", None):
         load_env_file(args.env_file, override=True)
 
@@ -393,12 +391,11 @@ def cmd_login(args) -> int:
 
     settings = build_settings(api=api, base_url=base_url, api_key=key, cache_enabled=False)
     if not args.no_verify:
-        try:
-            models = build_provider(settings).list_models()
-        except Exception as exc:
-            print(f"\nnot saved: the gateway rejected this key - {exc}", file=sys.stderr)
+        ok, detail = verify_credentials(settings)
+        if not ok:
+            print(f"\nnot saved: {detail}", file=sys.stderr)
             return 1
-        print(f"verified: {len(models)} models visible")
+        print(f"verified : {detail}")
 
     path = save_credentials(api, api_key=key, base_url=base_url)
     print(f"saved    : {path} (readable only by you)")
@@ -408,6 +405,48 @@ def cmd_login(args) -> int:
     suffix = "" if api == default_api else f" --api {api}"
     print(f"\nYou are ready. Try:\n  llm-extract -i ./docs -o ./out{suffix}")
     return 0
+
+
+def _is_auth_failure(exc) -> bool:
+    """True when a provider error is specifically a rejected credential."""
+    message = str(exc)
+    return "HTTP 401" in message or "HTTP 403" in message
+
+
+def verify_credentials(settings) -> tuple:
+    """Prove a key actually works, and say how confident that verdict is.
+
+    Listing models is not sufficient evidence on its own: some gateways serve
+    ``/v1/models`` without authentication, so a model list proves the host is
+    reachable but says nothing about the key. A single one-token completion is
+    what actually exercises authentication, so it decides the verdict.
+
+    Returns ``(ok, detail)``. A non-authentication failure (an unavailable
+    model, a transient error) is reported but does not veto the save, because
+    the key itself was never shown to be wrong.
+    """
+    from .providers import build_provider
+
+    provider = build_provider(settings)
+    try:
+        models = provider.list_models()
+    except Exception as exc:
+        if _is_auth_failure(exc):
+            return False, f"the gateway rejected this key - {exc}"
+        return False, f"the gateway could not be reached - {exc}"
+
+    # Prefer a model the gateway actually offers, so a wrong default model
+    # cannot be mistaken for a wrong key.
+    model = settings.model if settings.model in models else (models[0] if models else settings.model)
+    try:
+        provider.complete([{"role": "user", "content": "ping"}],
+                          model=model, temperature=0.0, max_tokens=1)
+    except Exception as exc:
+        if _is_auth_failure(exc):
+            return False, f"the gateway rejected this key - {exc}"
+        return True, (f"{len(models)} models visible; the key could not be fully "
+                      f"exercised ({exc})")
+    return True, f"{len(models)} models visible, test call accepted"
 
 
 def cmd_logout(args) -> int:

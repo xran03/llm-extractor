@@ -293,5 +293,75 @@ class ImplicitPromptTest(StoreTestCase):
         self.assertEqual(calls, [])
 
 
+class VerificationTest(StoreTestCase):
+    """A key is only "verified" when authentication was actually exercised."""
+
+    class _Provider:
+        def __init__(self, models=None, complete_error=None):
+            self._models = models if models is not None else ["m1"]
+            self._complete_error = complete_error
+            self.completed = False
+
+        def list_models(self):
+            if isinstance(self._models, Exception):
+                raise self._models
+            return self._models
+
+        def complete(self, *args, **kwargs):
+            self.completed = True
+            if self._complete_error:
+                raise self._complete_error
+            return object()
+
+    def _verify_with(self, provider):
+        import llm_extractor.providers as providers
+
+        original = providers.build_provider
+        providers.build_provider = lambda *a, **k: provider
+        try:
+            return cli.verify_credentials(
+                build_settings("llmhub", base_url="https://gw", api_key="k",
+                               cache_enabled=False))
+        finally:
+            providers.build_provider = original
+
+    def test_open_models_endpoint_alone_is_not_proof(self):
+        """Regression: some gateways serve /v1/models without authentication."""
+        from llm_extractor.providers import ProviderError
+
+        provider = self._Provider(
+            models=["m1", "m2"],
+            complete_error=ProviderError("llmhub HTTP 401 from /v1/chat/completions: "
+                                         "{\"error\": \"Invalid or expired key\"}"))
+        ok, detail = self._verify_with(provider)
+        self.assertFalse(ok, "a rejected key was reported as verified")
+        self.assertIn("rejected", detail)
+        self.assertTrue(provider.completed, "authentication was never exercised")
+
+    def test_working_key_is_verified(self):
+        provider = self._Provider(models=["m1", "m2"])
+        ok, detail = self._verify_with(provider)
+        self.assertTrue(ok)
+        self.assertIn("test call accepted", detail)
+
+    def test_unreachable_gateway_is_reported(self):
+        from llm_extractor.providers import ProviderError
+
+        provider = self._Provider(models=ProviderError("network error"))
+        ok, detail = self._verify_with(provider)
+        self.assertFalse(ok)
+        self.assertIn("could not be reached", detail)
+
+    def test_non_auth_failure_does_not_veto_the_key(self):
+        """An unavailable model is not evidence that the key is wrong."""
+        from llm_extractor.providers import ProviderError
+
+        provider = self._Provider(
+            models=["m1"], complete_error=ProviderError("llmhub HTTP 400: unknown model"))
+        ok, detail = self._verify_with(provider)
+        self.assertTrue(ok)
+        self.assertIn("not be fully exercised", detail)
+
+
 if __name__ == "__main__":
     unittest.main()
