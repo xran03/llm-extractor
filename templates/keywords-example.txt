@@ -1,0 +1,29 @@
+# Search terms, one per line. Blank lines and lines starting with '#' are ignored.
+#
+#   llm-extract run --source openalex \
+#                   --param search_file=templates/keywords-example.txt \
+#                   --param max_records=500 -o ./out
+#
+# Results from every term are unioned and de-duplicated by record id, so terms
+# are meant to overlap: broad wording finds the obvious papers, narrow wording
+# reaches the ones a single phrase misses.
+#
+# A .csv or .tsv works too — the first column is read, and a header row named
+# query/term/search/keyword is skipped.
+
+# --- pneumococcal ---------------------------------------------------------
+pneumococcal conjugate vaccine immunogenicity
+pneumococcal polysaccharide protein conjugate antibody response
+Streptococcus pneumoniae capsular polysaccharide conjugate opsonophagocytic
+
+# --- Escherichia coli -----------------------------------------------------
+ExPEC conjugate vaccine immunogenicity
+Escherichia coli O-antigen bioconjugate vaccine antibody
+
+# --- Group B Streptococcus ------------------------------------------------
+Group B Streptococcus capsular polysaccharide conjugate vaccine
+Streptococcus agalactiae conjugate vaccine maternal immunisation antibody
+
+# --- assay and carrier angles --------------------------------------------
+opsonophagocytic killing assay conjugate vaccine titer
+CRM197 carrier protein conjugate vaccine IgG geometric mean

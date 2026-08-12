@@ -2,20 +2,41 @@
   "name": "conjugate_titer",
   "description": "Antibody titer measurements from conjugate-vaccine literature (pneumococcal, E. coli, GBS), keyed for later clustering by study batch, species and assay.",
   "system_prompt": "You are a meticulous document data-extraction agent working on vaccine immunogenicity literature. You extract ONLY facts explicitly stated in the provided material. You never guess, never infer unstated values, and you always quote your evidence verbatim. If a field is unknown, use null - null is always better than a plausible guess.",
-  "instructions": "Extract every explicitly reported antibody TITER or CONCENTRATION measurement and emit ONE JSON array.\n\nONE RECORD = one value, for one group, for one serotype, at one timepoint, from one assay.\n\nRules that matter most:\n(A) NEVER merge OPA and IgG. They are different assays with different units and are never interchangeable. Set assay accordingly; if the text does not say which, use 'na' rather than guessing.\n(B) NEVER pack serotype, species, dose or timepoint into group_label. Each gets its own field, so records can be grouped later.\n(C) species is the animal or population actually assayed - infant/adult human, mouse, rabbit, or non-human primate. Record it even when it is only stated once in the methods.\n(D) study_batch identifies the experiment the record came from: the study/trial name, lot, or experiment label as written. Records sharing a batch will be clustered together, so copy it exactly and consistently.\n(E) Values below a detection limit are records with censoring='left_censored' and the limit as the value. An assay reported but not run is value=null with an explanation in notes.\n(F) value_source says where the number physically came from: running text, a table, or a figure. Be accurate - a figure reading is checked against the vision pass.\n(G) Report the number exactly as printed, including its unit. Do not convert units.",
-  "key_fields": ["assay", "serotype", "group_label", "timepoint", "species"],
+  "instructions": "Extract every explicitly reported antibody TITER or CONCENTRATION measurement and emit ONE JSON array.\n\nONE RECORD = one value, for one group, for one serotype, at one timepoint, from one assay.\n\nRules that matter most:\n(A) NEVER merge OPA and IgG. They are different assays with different units and are never interchangeable. Set assay accordingly; if the text does not say which, use 'na' rather than guessing.\n(B) NEVER pack serotype, species, dose or timepoint into group_label. Each gets its own field, so records can be grouped later.\n(C) species is the animal or population actually assayed - infant/adult human, mouse, rabbit, or non-human primate. Record it even when it is only stated once in the methods.\n(D) study_batch identifies the experiment the record came from: the study/trial name, lot, or experiment label as written. Records sharing a batch will be clustered together, so copy it exactly and consistently.\n(E) NEGATIVE RESULTS ARE DATA AND MUST BE EXTRACTED. A vaccine that failed to raise a response is as informative as one that succeeded, and dropping such records silently biases everything computed from this table. Extract them as full records:\n   - 'titer <1:8', '<0.05 ug/mL', 'below the limit of detection' -> value = the limit itself (0.05), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same limit.\n   - 'the OPA titer was 1', 'did not elicit detectable antibodies', 'no response' -> value = that floor value (1), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same floor.\n   - 'no significant rise from baseline', 'p = 0.42' -> censoring = 'observed', response_status = 'not_significant', with the reported value.\n   - a value that is real but below a protective threshold (e.g. 0.20 against a 0.35 ug/mL threshold) -> censoring = 'observed', response_status = 'non_responder'.\n   - an assay that was planned but never run, or a value simply absent -> response_status = 'not_measured', value = null. Never confuse this with a measured negative: 'not measured' and 'measured and found absent' are different facts.\n(F) value IS THE MEASUREMENT, NEVER A COUNT OF SUBJECTS. In 'detectable titers were found in 28 (52%) of patients', 28 is n_subjects and 52 is a percentage of responders - neither is a titer. Put 28 in n_subjects, and only record a value if the titer itself is stated. If the sentence gives a proportion rather than a titer, set value to that proportion and value_kind = 'percent_responders'.\n(G) value_unit is a UNIT, such as 'ug/mL', 'OPA titer' or '%'. It is never a sentence, a definition, or a phrase containing '='. If no unit is written, use null.\n(H) censoring and response_status MUST be one of the listed enum values, exactly. Do not invent new ones. If none applies, use 'na'.\n(I) value_source says where the number physically came from: running text, a table, or a figure. Be accurate - a figure reading is checked against the vision pass.\n(J) Report the number exactly as printed, including its unit. Do not convert units.",
+  "key_fields": [
+    "assay",
+    "serotype",
+    "group_label",
+    "timepoint",
+    "species"
+  ],
   "fields": [
     {
       "name": "pathogen",
       "type": "string",
       "description": "Organism the vaccine targets.",
-      "enum": ["pneumococcus", "e_coli", "gbs", "meningococcus", "hib", "other", "na"]
+      "enum": [
+        "pneumococcus",
+        "e_coli",
+        "gbs",
+        "meningococcus",
+        "hib",
+        "other",
+        "na"
+      ]
     },
     {
       "name": "assay",
       "type": "string",
       "description": "Assay that produced the value. OPA and IgG must never be merged.",
-      "enum": ["opa", "igg", "igm", "iga", "elisa_total", "na"]
+      "enum": [
+        "opa",
+        "igg",
+        "igm",
+        "iga",
+        "elisa_total",
+        "na"
+      ]
     },
     {
       "name": "endpoint",
@@ -31,7 +52,19 @@
       "name": "species",
       "type": "string",
       "description": "Species or population actually assayed.",
-      "enum": ["human_infant", "human_child", "human_adult", "human_elderly", "mouse", "rabbit", "nhp", "rat", "guinea_pig", "other", "na"]
+      "enum": [
+        "human_infant",
+        "human_child",
+        "human_adult",
+        "human_elderly",
+        "mouse",
+        "rabbit",
+        "nhp",
+        "rat",
+        "guinea_pig",
+        "other",
+        "na"
+      ]
     },
     {
       "name": "species_detail",
@@ -82,7 +115,15 @@
       "name": "value_kind",
       "type": "string",
       "description": "What kind of summary the number is.",
-      "enum": ["geometric_mean", "mean", "median", "individual", "fold_rise", "percent_responders", "na"]
+      "enum": [
+        "geometric_mean",
+        "mean",
+        "median",
+        "individual",
+        "fold_rise",
+        "percent_responders",
+        "na"
+      ]
     },
     {
       "name": "ci_low",
@@ -97,14 +138,51 @@
     {
       "name": "censoring",
       "type": "string",
-      "description": "Whether the value is a detection-limit bound.",
-      "enum": ["observed", "left_censored", "right_censored", "na"]
+      "description": "Whether the value is a detection-limit bound rather than a measurement. Use exactly one of the listed values.",
+      "enum": [
+        "observed",
+        "left_censored",
+        "right_censored",
+        "na"
+      ]
+    },
+    {
+      "name": "response_status",
+      "type": "string",
+      "description": "The biological verdict, which is not the same question as censoring. 'undetectable' = assayed and nothing found; 'non_responder' = a real value that failed to reach the stated threshold; 'not_significant' = a rise that did not reach significance; 'responder' = met the threshold or rose significantly; 'not_measured' = never assayed, which is absence of data rather than a negative result.",
+      "enum": [
+        "responder",
+        "non_responder",
+        "undetectable",
+        "not_significant",
+        "not_measured",
+        "na"
+      ]
+    },
+    {
+      "name": "detection_limit",
+      "type": "number",
+      "description": "The assay's stated limit of detection or quantification, in value_unit. Needed to rank censored values correctly instead of treating them as zero."
+    },
+    {
+      "name": "response_threshold",
+      "type": "number",
+      "description": "Protective or seroconversion threshold the study judged responders against, e.g. 0.35 for pneumococcal IgG."
     },
     {
       "name": "carrier",
       "type": "string",
       "description": "Carrier protein as written.",
-      "enum": ["crm197", "tt", "dt", "scp", "protein_d", "omp", "other", "na"]
+      "enum": [
+        "crm197",
+        "tt",
+        "dt",
+        "scp",
+        "protein_d",
+        "omp",
+        "other",
+        "na"
+      ]
     },
     {
       "name": "valency",
@@ -125,7 +203,12 @@
       "name": "value_source",
       "type": "string",
       "description": "Where the number physically came from.",
-      "enum": ["text", "table", "figure", "na"]
+      "enum": [
+        "text",
+        "table",
+        "figure",
+        "na"
+      ]
     },
     {
       "name": "figure",
@@ -136,24 +219,57 @@
       "name": "extraction_mode",
       "type": "string",
       "description": "How the record was obtained. Set by the pipeline, not the model: 'llm' = the text pass read it directly; 'ocr' = read from a figure or table image; 'multimodal' = the cheap passes could not resolve it alone and a stronger multi-input model was given the text, the figures and the tables together to work it out.",
-      "enum": ["multimodal", "llm", "ocr", "na"]
+      "enum": [
+        "multimodal",
+        "llm",
+        "ocr",
+        "na"
+      ]
     },
     {
       "name": "escalation_reason",
       "type": "string",
       "description": "Why the record needed the stronger multimodal model, e.g. 'table had no caption', 'value plotted but unlabelled', 'group named only in the body text'.",
-      "enum": ["unlabelled_table", "value_without_context", "context_without_value", "ambiguous_group", "conflicting_readings", "none", "na"]
+      "enum": [
+        "unlabelled_table",
+        "value_without_context",
+        "context_without_value",
+        "ambiguous_group",
+        "conflicting_readings",
+        "none",
+        "na"
+      ]
     },
     {
       "name": "modality_conflict",
       "type": "string",
       "description": "Set by the pipeline when the text layer and the figure reading disagree about the same measurement.",
-      "enum": ["none", "value_mismatch", "unit_mismatch", "na"]
+      "enum": [
+        "none",
+        "value_mismatch",
+        "unit_mismatch",
+        "na"
+      ]
     },
     {
       "name": "notes",
       "type": "string",
       "description": "Anything needed to interpret the record, including why a value is missing."
+    },
+    {
+      "name": "review_status",
+      "type": "string",
+      "description": "Set by the pipeline after validation. 'accepted' passed every check, on its own or after escalation; 'needs_review' still carries a contradiction the document could not resolve, and should be excluded from anything computed on the table until a human has looked.",
+      "enum": [
+        "accepted",
+        "needs_review",
+        "na"
+      ]
+    },
+    {
+      "name": "convergence_rounds",
+      "type": "integer",
+      "description": "How many escalation rounds this record needed. 0 means the cheap passes were enough."
     },
     {
       "name": "source_span",

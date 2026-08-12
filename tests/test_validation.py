@@ -221,3 +221,75 @@ class VisionTriageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SearchListTest(unittest.TestCase):
+    """A question needs several wordings; the tool should take the list."""
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = __import__("pathlib").Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _write(self, name, text):
+        path = self.dir / name
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+
+    def test_plain_text_one_term_per_line(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        path = self._write("k.txt", "alpha vaccine\nbeta vaccine\n")
+        self.assertEqual(read_search_terms(path), ["alpha vaccine", "beta vaccine"])
+
+    def test_comments_and_blank_lines_are_ignored(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        path = self._write("k.txt", "# a comment\n\nalpha vaccine\n\n# another\nbeta\n")
+        self.assertEqual(read_search_terms(path), ["alpha vaccine", "beta"])
+
+    def test_csv_reads_the_first_column_and_skips_a_header(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        path = self._write("k.csv", "query,note\nalpha vaccine,x\nbeta vaccine,y\n")
+        self.assertEqual(read_search_terms(path), ["alpha vaccine", "beta vaccine"])
+
+    def test_tsv_is_accepted(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        path = self._write("k.tsv", "alpha vaccine\tnote\nbeta vaccine\tnote\n")
+        self.assertEqual(read_search_terms(path), ["alpha vaccine", "beta vaccine"])
+
+    def test_duplicate_terms_are_collapsed(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        path = self._write("k.txt", "Alpha Vaccine\nalpha   vaccine\nbeta\n")
+        self.assertEqual(read_search_terms(path), ["Alpha Vaccine", "beta"])
+
+    def test_missing_file_is_a_clean_error(self):
+        from llm_extractor.sources.rest import RestSourceError, read_search_terms
+
+        with self.assertRaises(RestSourceError):
+            read_search_terms(str(self.dir / "nope.txt"))
+
+    def test_source_loads_every_term(self):
+        path = self._write("k.txt", "alpha\nbeta\ngamma\n")
+        source = build_source("openalex", search_file=path)
+        self.assertEqual(source.search_terms, ["alpha", "beta", "gamma"])
+
+    def test_explicit_search_is_tried_first(self):
+        path = self._write("k.txt", "beta\n")
+        source = build_source("openalex", search="alpha", search_file=path)
+        self.assertEqual(source.search_terms[0], "alpha")
+
+    def test_shipped_example_list_parses(self):
+        from llm_extractor.sources.rest import read_search_terms
+
+        example = __import__("pathlib").Path(__file__).resolve().parents[1] / \
+            "templates" / "keywords-example.txt"
+        terms = read_search_terms(str(example))
+        self.assertGreaterEqual(len(terms), 5)
+        self.assertTrue(all(not t.startswith("#") for t in terms))

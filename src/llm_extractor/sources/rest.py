@@ -18,11 +18,13 @@ Auth styles: ``none``, ``bearer`` (``Authorization: Bearer ...``), ``header``
 """
 from __future__ import annotations
 
+import csv
 import json
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from ..credentials import get_env
 from .base import SOURCES, Source, SourceDocument
@@ -50,6 +52,51 @@ def dig(payload, path: str, default=None):
     return current
 
 
+def read_search_terms(source) -> list:
+    """Read search terms from a list file, one query per line.
+
+    A literature question is rarely one phrase. Pneumococcal, E. coli and GBS
+    conjugate work needs a dozen wordings between them, and asking someone to
+    re-run the tool once per phrase — then merge the results by hand — is how
+    duplicates and gaps get in. Accepting the list instead keeps the union and
+    the de-duplication inside the tool, where the ids are known.
+
+    Plain text, CSV and TSV are all accepted because that is what people
+    actually have: a text file is one term per line, while CSV/TSV take the
+    first column, skipping a header if it looks like one. Blank lines and
+    lines starting with ``#`` are ignored, so a list can carry comments.
+    """
+    path = Path(source)
+    if not path.is_file():
+        raise RestSourceError(f"search list not found: {path}")
+
+    lines = [line.strip() for line in
+             path.read_text(encoding="utf-8", errors="replace").splitlines()]
+    lines = [line for line in lines if line and not line.startswith("#")]
+    if not lines:
+        return []
+
+    delimiter = "\t" if path.suffix.lower() in (".tsv", ".tab") else \
+        ("," if path.suffix.lower() == ".csv" else "")
+    if delimiter:
+        rows = list(csv.reader(lines, delimiter=delimiter))
+        terms = [row[0].strip() for row in rows if row and row[0].strip()]
+        # Drop an obvious header rather than searching for the word "query".
+        if terms and terms[0].lower() in ("query", "term", "search",
+                                          "keyword", "keywords"):
+            terms = terms[1:]
+    else:
+        terms = lines
+
+    seen, unique = set(), []
+    for term in terms:
+        key = " ".join(term.lower().split())
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(term)
+    return unique
+
+
 @SOURCES.register("rest")
 class RestSource(Source):
     """Generic paginated JSON API source."""
@@ -61,6 +108,10 @@ class RestSource(Source):
         "path": {"type": "string", "description": "Endpoint path, e.g. /v1/search."},
         "query": {"type": "object", "description": "Static query parameters."},
         "search": {"type": "string", "description": "Value for the query term parameter."},
+        "search_file": {"type": "string",
+                        "description": "Path to a .txt/.csv/.tsv list of search "
+                                       "terms, one per line; results are unioned "
+                                       "and de-duplicated."},
         "query_param": {"type": "string", "description": "Name of the search parameter."},
         "records_path": {"type": "string", "description": "Dotted path to the result list."},
         "id_field": {"type": "string"},
@@ -101,8 +152,17 @@ class RestSource(Source):
             )
         self.query = dict(raw_query or {})
         self.query_param = merged.get("query_param", "q")
+
+        # One search, or many. Many is kept as a list rather than joined into a
+        # single OR query, because every API spells boolean syntax differently
+        # and a wrong join silently returns the wrong set.
+        self.search_terms = []
+        if merged.get("search_file"):
+            self.search_terms = read_search_terms(merged["search_file"])
         if search:
-            self.query[self.query_param] = search
+            self.search_terms.insert(0, search)
+        if self.search_terms:
+            self.query[self.query_param] = self.search_terms[0]
 
         self.records_path = merged.get("records_path", "")
         self.id_field = merged.get("id_field", "id")
@@ -233,20 +293,33 @@ class RestSource(Source):
         return self._total
 
     def iter_documents(self):
+        """Yield documents for every search term, de-duplicated across terms.
+
+        Terms overlap heavily by design — that is what makes a list better than
+        one phrase — so the same paper will be returned by several of them. It
+        is emitted once, by id, which is why the union has to happen here rather
+        than in whatever merges the CSVs afterwards.
+        """
         emitted = 0
         seen: set = set()
-        for body in self._pages():
-            if self.total_path and self._total is None:
-                self._total = dig(body, self.total_path)
-            for raw in dig(body, self.records_path, []) or []:
-                document = self.to_document(raw)
-                if document is None or document.doc_id in seen:
-                    continue
-                seen.add(document.doc_id)
-                yield document
-                emitted += 1
-                if self.max_records and emitted >= self.max_records:
-                    return
+        for term in (self.search_terms or [None]):
+            if term is not None:
+                self.query[self.query_param] = term
+                self._total = None
+            for body in self._pages():
+                if self.total_path and self._total is None:
+                    self._total = dig(body, self.total_path)
+                for raw in dig(body, self.records_path, []) or []:
+                    document = self.to_document(raw)
+                    if document is None or document.doc_id in seen:
+                        continue
+                    seen.add(document.doc_id)
+                    if term is not None:
+                        document.metadata.setdefault("search_term", term)
+                    yield document
+                    emitted += 1
+                    if self.max_records and emitted >= self.max_records:
+                        return
 
     # ------------------------------- mapping --------------------------------
     def to_document(self, raw: dict):
