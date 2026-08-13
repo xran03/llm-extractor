@@ -316,6 +316,84 @@ label or a number, while whitespace, case and OCR damage such as `ug/rnL` for
 `mg/mL` when the paper said `µg/mL` — a thousand-fold error that a plain number
 comparison passes.
 
+## The vision pass on its own
+
+Numbers in this kind of literature often live only in a figure, so there is a
+second reader: each figure is sent to a vision model that must answer under
+`OCR_JSON_SCHEMA`, returning structured data — items, tables, axis labels, a
+caption, text blocks — rather than prose. That is what lets a figure reading be
+merged with text records instead of ending up as a paragraph nobody can query.
+
+Most runs get this automatically. If you want *only* this channel, turn the
+other work off:
+
+```bash
+# vision only: read every figure, skip the aggregation agent
+llm-extract -i ./docs -o ./out --ocr always --no-aggregate
+
+# pick the vision model separately from the extraction model
+llm-extract -i ./docs -o ./out --ocr always --ocr-model gpt-4.1
+```
+
+The three policies trade cost against recall:
+
+| `--ocr` | when the vision model is called |
+|---|---|
+| `never` | not at all — text only, cheapest |
+| `auto` (default) | when the document has no text layer, when too little text was recovered to be prose, or when the text pass returned nothing or nothing grounded |
+| `always` | for every figure of every document, even when the text pass already succeeded |
+
+`auto` is the one to leave alone for a mixed folder: a born-digital paper whose
+text extracted cleanly never pays for a vision call, while a scanned one falls
+through to it automatically. Reach for `always` when you know the numbers you
+want are plotted rather than written.
+
+### What it writes
+
+The vision pass has its own artifacts, independent of the record table:
+
+```
+out/
+  <doc>.ocr.json     the structured reading of each figure — items, tables,
+                     axis labels, caption, text blocks, notes
+  <doc>.figures.csv  the same thing flattened: one row per value read, with
+                     the image, figure type, axis labels, series and unit
+  figures.csv        every figure value from every document in the run
+```
+
+`figures.csv` is the one to open first; `<doc>.ocr.json` keeps the full nested
+reading for anything the flat table cannot express.
+
+Where figures come from depends on the format, not on the extension: an image
+file is itself the figure, `pptx`/`docx`/`odp`/`epub` have their embedded media
+unpacked, and a PDF has its pages rasterised so a scan can still be read. PDF
+pages are triaged before rendering — a page that draws a graph, embeds a
+picture, or holds too little text to be prose is rendered, and one that is
+plainly prose the text pass already read verbatim is skipped.
+
+### Limits worth knowing
+
+Each figure is read by a single call, and that call is capped at 4,000 output
+tokens. Under the strict figure schema every value costs roughly thirty tokens
+once its label, series and unit are included, which works out at about 150
+values per figure. A very dense figure — a dot plot with a point per subject,
+say — does not fit, and what comes back is the part the model chose to report
+rather than everything that is plotted. Treat this channel as a reader of
+labelled values (bar heights, table cells, plotted means, axis annotations)
+rather than as a way to recover a whole distribution.
+
+Two other bounds apply per document: `--max-figures` (20 by default) caps how
+many figures are sent at all, and any image over 12 MB is skipped rather than
+uploaded, with the reason recorded in that figure's `notes`.
+
+A figure that fails is contained: it is recorded with an empty reading and the
+document keeps going, because one unreadable figure should never cost a paper.
+
+Every call goes through the same cache as everything else, so re-running a
+folder after changing only the text-side template costs nothing on this side —
+and `llm-extract cache entries --stage ocr` lists what the vision pass has
+already answered.
+
 ## Try it
 
 [`demo/`](demo/) ships a public-domain scanned report, one chart cropped out of
