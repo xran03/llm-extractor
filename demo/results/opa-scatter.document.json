@@ -1,0 +1,135 @@
+{
+  "doc_id": "opa-scatter",
+  "title": "opa-scatter",
+  "uri": "demo/opa-scatter.png",
+  "source": "folder",
+  "source_path": "demo/opa-scatter.png",
+  "metadata": {
+    "relative_path": "opa-scatter.png",
+    "bytes": 36143
+  },
+  "stats": {
+    "template": "generic",
+    "api": "stub",
+    "model": "stub-model",
+    "format": "png",
+    "media_type": "image",
+    "ocr_model": "stub-vision",
+    "ocr_policy": "always",
+    "ocr_executed": true,
+    "text_chars": 0,
+    "duration_s": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "cached_calls": 0,
+    "records": 0,
+    "grounded": 0,
+    "ungrounded": 0,
+    "numeric_records": 0,
+    "values_grounded": 0,
+    "values_ungrounded": 0,
+    "ocr_figures": 1,
+    "ocr_items": 3,
+    "ocr_tables": 0,
+    "ocr_numeric_items": 3
+  },
+  "aggregate": {
+    "summary": "A dot plot of serotype 6B OPA titers 28 days after vaccination in three arms of 34 subjects each. Both conjugate groups responded and the placebo group did not.",
+    "key_findings": [
+      "PCV13 reached a geometric mean OPA titer of 814.",
+      "PCV20 reached a geometric mean OPA titer of 437.",
+      "The placebo group stayed near the assay floor at 15."
+    ],
+    "figure_insights": [
+      {
+        "image": "opa-scatter.png",
+        "finding": "PCV13 group geometric mean",
+        "value": 814,
+        "unit": "OPA titer"
+      },
+      {
+        "image": "opa-scatter.png",
+        "finding": "PCV20 group geometric mean",
+        "value": 437,
+        "unit": "OPA titer"
+      },
+      {
+        "image": "opa-scatter.png",
+        "finding": "Placebo group geometric mean",
+        "value": 15,
+        "unit": "OPA titer"
+      }
+    ],
+    "conflicts": [],
+    "coverage_gaps": [
+      "The 102 individual subject titers are plotted but never written, so only the three printed group means were recovered."
+    ]
+  },
+  "records": [],
+  "figures": [
+    {
+      "image": "opa-scatter.png",
+      "path": "demo/opa-scatter.png",
+      "ocr": {
+        "figure_type": "chart",
+        "caption": "Figure 1. Serotype 6B OPA titers 28 days after vaccination.",
+        "axis_x": "Vaccine group",
+        "axis_y": "OPA titer (1/dilution)",
+        "items": [
+          {
+            "label": "PCV13",
+            "series": "Day 28",
+            "value": 814,
+            "value_text": "GMT 814",
+            "unit": "OPA titer",
+            "note": "geometric mean printed above the column"
+          },
+          {
+            "label": "PCV20",
+            "series": "Day 28",
+            "value": 437,
+            "value_text": "GMT 437",
+            "unit": "OPA titer",
+            "note": "geometric mean printed above the column"
+          },
+          {
+            "label": "Placebo",
+            "series": "Day 28",
+            "value": 15,
+            "value_text": "GMT 15",
+            "unit": "OPA titer",
+            "note": "geometric mean printed above the column"
+          }
+        ],
+        "tables": [],
+        "text_blocks": [
+          "Figure 1. Serotype 6B OPA titers 28 days after vaccination.",
+          "OPA titer (1/dilution)",
+          "GMT 814",
+          "GMT 437",
+          "GMT 15",
+          "PCV13",
+          "PCV20",
+          "Placebo",
+          "n=34",
+          "n=34",
+          "n=34",
+          "10000",
+          "1000",
+          "100",
+          "10",
+          "1"
+        ],
+        "notes": "Each group plots 34 individual subjects. Only the printed group means are reported: the individual points carry no labels, and a vision model cannot enumerate them reliably."
+      },
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached": false
+      }
+    }
+  ],
+  "errors": [],
+  "generated_at": 0
+}

@@ -1,20 +1,25 @@
 # Demo
 
-Two real inputs and the output they produce, so you can see the artifact shapes
+Three inputs and the output they produce, so you can see the artifact shapes
 before spending a token.
 
 | File | What it is |
 |---|---|
 | `naca-report-1372-excerpt.pdf` | 3-page excerpt of a 1958 scanned technical report |
 | `naca-figure-2.png` | one chart cropped out of that report |
-| `results/` | reference output for both inputs |
+| `opa-scatter.png` | a scatter plot of vaccine titers, drawn for this demo |
+| `results/` | reference output for all three |
 
-Both inputs come from **NACA Report 1372**, *A Method of Computing the Transient
+The first two come from **NACA Report 1372**, *A Method of Computing the Transient
 Temperature of Thick Walls from Arbitrary Variation of Adiabatic-Wall
 Temperature and Heat-Transfer Coefficient* (P. R. Hill, 1958), retrieved from
 the [NASA Technical Reports Server](https://ntrs.nasa.gov/citations/19930091019).
 It is a work of the U.S. Government and is **in the public domain**. The excerpt
 is pages 887–889; the PNG is Figure 2 from page 888.
+
+`opa-scatter.png` is ours: `_make_opa_scatter.py` draws it, so it can be
+redistributed freely and what is printed on it is known exactly rather than
+squinted at.
 
 ## Why this document
 
@@ -76,6 +81,33 @@ kept with the value empty rather than a number being invented, and
 `figures.csv` holds what only the chart knows — `Wall surface temperature, deg F`
 against `Time, sec`, and the plotted values — none of which appear in the PDF's
 text layer.
+
+## The scatter plot, and what a vision model can honestly do with it
+
+`opa-scatter.png` is the case this literature is full of: three groups of 34
+subjects, every titer plotted as a dot, and the group geometric means printed
+above the columns. A text extractor gets nothing from it at all — there is no
+text layer, and even in a born-digital paper the numbers are drawn rather than
+written.
+
+The vision pass reads what is *written on* the figure:
+
+| label | series | value | unit | value_text |
+|---|---|---|---|---|
+| PCV13 | Day 28 | 814 | OPA titer | GMT 814 |
+| PCV20 | Day 28 | 437 | OPA titer | GMT 437 |
+| Placebo | Day 28 | 15 | OPA titer | GMT 15 |
+
+— plus the caption, both axis labels and the tick values, all as structured
+JSON rather than a paragraph, which is what lets these rows sit in the same
+table as records read out of prose.
+
+What it does **not** do is give you the 102 individual subject titers. Those
+points carry no labels, and one call reads one figure under a 4,000-token cap,
+which is about 150 values. This channel reads the values a figure *states* —
+printed means, bar heights, table cells, axis annotations — and the reference
+output says so in its own `notes` and `coverage_gaps` rather than quietly
+returning three rows and letting you assume that was everything.
 
 ## About `results/`
 

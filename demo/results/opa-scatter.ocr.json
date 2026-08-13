@@ -1,0 +1,64 @@
+[
+  {
+    "image": "opa-scatter.png",
+    "path": "demo/opa-scatter.png",
+    "ocr": {
+      "figure_type": "chart",
+      "caption": "Figure 1. Serotype 6B OPA titers 28 days after vaccination.",
+      "axis_x": "Vaccine group",
+      "axis_y": "OPA titer (1/dilution)",
+      "items": [
+        {
+          "label": "PCV13",
+          "series": "Day 28",
+          "value": 814,
+          "value_text": "GMT 814",
+          "unit": "OPA titer",
+          "note": "geometric mean printed above the column"
+        },
+        {
+          "label": "PCV20",
+          "series": "Day 28",
+          "value": 437,
+          "value_text": "GMT 437",
+          "unit": "OPA titer",
+          "note": "geometric mean printed above the column"
+        },
+        {
+          "label": "Placebo",
+          "series": "Day 28",
+          "value": 15,
+          "value_text": "GMT 15",
+          "unit": "OPA titer",
+          "note": "geometric mean printed above the column"
+        }
+      ],
+      "tables": [],
+      "text_blocks": [
+        "Figure 1. Serotype 6B OPA titers 28 days after vaccination.",
+        "OPA titer (1/dilution)",
+        "GMT 814",
+        "GMT 437",
+        "GMT 15",
+        "PCV13",
+        "PCV20",
+        "Placebo",
+        "n=34",
+        "n=34",
+        "n=34",
+        "10000",
+        "1000",
+        "100",
+        "10",
+        "1"
+      ],
+      "notes": "Each group plots 34 individual subjects. Only the printed group means are reported: the individual points carry no labels, and a vision model cannot enumerate them reliably."
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  }
+]
