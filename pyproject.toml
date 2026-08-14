@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# setuptools 77 is the floor because that is where a SPDX `license` string and
+# `license-files` are understood. The table form they replace is deprecated and
+# stops being supported on 2027-02-18.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +11,8 @@ version = "0.1.0"
 description = "Folder-in / JSON-out document data extraction driven by an LLM API (LLMHub chat-completions or AI Model Hub responses), with vision OCR and an on-disk response cache."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "xran03" }]
 keywords = ["llm", "extraction", "ocr", "pdf", "docx", "pptx", "json"]
 classifiers = [
@@ -17,7 +21,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Text Processing",
 ]
