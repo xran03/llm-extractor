@@ -47,6 +47,15 @@ class SpanGroundingTest(unittest.TestCase):
         self.assertFalse(span_is_grounded("", DOC))
         self.assertFalse(span_is_grounded(None, DOC))
 
+    def test_a_quote_of_only_digits_is_not_evidence(self):
+        """An axis tick label arrives as a bare number and matches anything."""
+        for span in ("1", "10", "1,000", "0.5", "28", "1,165"):
+            with self.subTest(span=span):
+                self.assertFalse(span_is_grounded(span, DOC))
+
+    def test_a_number_quoted_with_its_context_still_grounds(self):
+        self.assertTrue(span_is_grounded("A total of 1,165 subjects", DOC))
+
     def test_empty_document_grounds_nothing(self):
         self.assertFalse(span_is_grounded("anything", ""))
 

@@ -135,9 +135,11 @@ Here is the whole of what the vision pass returned for it:
 | `tables` | 0 |
 | `text_blocks` | 20 |
 
-`figures.csv` therefore gets one row for the figure with every value column
-empty, and `records.csv` gets nothing at all. Not one of the several hundred
-plotted points was recovered, and neither were the histogram bar heights.
+`figures.csv` therefore gets one row for the figure carrying no value at all —
+its note reads *no values were read out of this figure*, so the row cannot be
+mistaken for a reading whose numbers went missing — and `records.csv` gets
+nothing. Not one of the several hundred plotted points was recovered, and
+neither were the histogram bar heights.
 
 The two numbers this figure actually states in print, `R2 = 0.93` and
 `R2 = 0.84`, *were* read — but they arrived as loose entries in `text_blocks`

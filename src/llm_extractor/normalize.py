@@ -152,10 +152,19 @@ def span_is_grounded(span, doc_text: str, min_coverage: float = SPAN_COVERAGE_TH
     * enough of its words must appear, so a substituted label is rejected;
     * enough of its characters must match, which is what tolerates whitespace,
       hyphenation and OCR damage in an otherwise genuine quote.
+
+    A quote made only of digits is refused before any of that. It cannot fail
+    the check, and a test nothing can fail certifies nothing.
     """
     needle = canon_text(span).lower()
     haystack = canon_text(doc_text).lower()
     if not needle or not haystack:
+        return False
+    if not any(character.isalpha() for character in needle):
+        # "1" occurs in almost every document, so locating it says nothing
+        # about whether the document states the record it is offered for.
+        # Axis tick labels reach the extractor in exactly this shape, and were
+        # being certified as grounded on the strength of a one-character match.
         return False
     if needle in haystack:
         return True

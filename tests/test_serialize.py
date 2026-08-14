@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_extractor.serialize import (FIGURE_COLUMNS, append_records_csv, figure_rows,
-                                     read_csv, record_columns, write_figures_csv,
-                                     write_records_csv)
+from llm_extractor.serialize import (FIGURE_COLUMNS, NO_READING_NOTE, append_records_csv,
+                                     figure_rows, read_csv, record_columns,
+                                     write_figures_csv, write_records_csv)
 from llm_extractor.templates import BUILTIN_TEMPLATES
 
 from ._fakes import DEFAULT_OCR
@@ -158,6 +158,19 @@ class FiguresCsvTest(unittest.TestCase):
                              "ocr": {"figure_type": "empty", "items": []}}], "d1")
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["value"])
+
+    def test_a_figure_that_yielded_nothing_says_so(self):
+        # Otherwise the row is indistinguishable from a reading whose values
+        # went missing, which is the opposite of what happened.
+        rows = figure_rows([{"image": "blank.png",
+                             "ocr": {"figure_type": "chart", "items": []}}], "d1")
+        self.assertEqual(rows[0]["note"], NO_READING_NOTE)
+
+    def test_the_model_s_own_note_is_not_overwritten(self):
+        rows = figure_rows([{"image": "blank.png",
+                             "ocr": {"figure_type": "chart", "items": [],
+                                     "notes": "axis unreadable"}}], "d1")
+        self.assertEqual(rows[0]["note"], "axis unreadable")
 
     def test_written_columns_match_the_schema(self):
         write_figures_csv(self.path, figure_rows(self.figures, "d1", "Report"))

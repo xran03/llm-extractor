@@ -31,6 +31,11 @@ FIGURE_COLUMNS = (
     "axis_x", "axis_y", "series", "label", "value", "value_text", "unit", "note",
 )
 
+#: Written into the note of a figure that yielded nothing, because a row of
+#: empty value columns reads like a figure whose values went missing, and the
+#: model does not reliably say in its own notes that it recovered none.
+NO_READING_NOTE = "no values were read out of this figure"
+
 
 def record_columns(template) -> list:
     """Stable column order: provenance, template fields, audit flags."""
@@ -82,7 +87,7 @@ def figure_rows(figures, doc_id: str = "", doc_title: str = "") -> list:
         if not items:
             rows.append({**base, "label": None, "series": None, "value": None,
                          "value_text": None, "unit": None,
-                         "note": payload.get("notes")})
+                         "note": payload.get("notes") or NO_READING_NOTE})
             continue
         for item in items:
             rows.append({
