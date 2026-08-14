@@ -201,8 +201,77 @@ OPA_AGGREGATE = {
 }
 
 
+# --- a real published figure: what a live model actually returned ----------
+#: Unlike every other payload here, this one was **not** written by hand. It is
+#: the verbatim reply of a live vision model (gpt-4.1) on
+#: ``h5-titre-histogram-scatter.jpg``, recorded once and replayed, so the demo
+#: can show real performance on a real published figure without costing a token
+#: to look at.
+#:
+#: Two things in it are worth reading closely. The model transcribed "Mean RMSE
+#: (detectable titers)" as "Mean RMSE (recodable titres)"; the misreading is
+#: kept, because editing it out is how a demo starts flattering itself. And
+#: ``items`` is empty — the panels were recognised and their labels read, but
+#: not one data point was recovered from the histogram or either scatter plot.
+H5_FIGURE_OCR = {
+    "figure_type": "mixed",
+    "caption": None,
+    "axis_x": None,
+    "axis_y": None,
+    "items": [],
+    "tables": [],
+    "text_blocks": [
+        "a", "Number of data points", "Log2 standard deviation",
+        "b", "Mean RMSE (recodable titres)", "Dimension",
+        "c", "R2", "Dimension",
+        "d", "Total map stress", "Dimension",
+        "e", "4D map distances", "3D map distances", "R2 = 0.93",
+        "f", "4D map antigen stress", "3D map antigen stress", "R2 = 0.84",
+    ],
+    "notes": None,
+}
+
+#: The aggregation agent's verbatim reply on the same figure. It lifted the two
+#: printed R² values out of the loose text blocks — which is the only place the
+#: numbers this figure states ever reached.
+H5_AGGREGATE = {
+    "summary": "The document presents a mixed figure containing several panels "
+               "labeled a–f, each apparently showing different statistical "
+               "metrics related to map dimensions and antigen stress. The "
+               "figure includes references to metrics such as Log2 standard "
+               "deviation, Mean RMSE, R2 values, and map stress, comparing 3D "
+               "and 4D map analyses. No textual records were extracted from "
+               "the document's main text.",
+    "key_findings": [
+        "R2 = 0.93 for 4D vs 3D map distances (panel e).",
+        "R2 = 0.84 for 4D vs 3D map antigen stress (panel f).",
+    ],
+    "figure_insights": [
+        {"image": "h5-titre-histogram-scatter.jpg",
+         "finding": "R2 value for 4D vs 3D map distances",
+         "value": 0.93, "unit": None},
+        {"image": "h5-titre-histogram-scatter.jpg",
+         "finding": "R2 value for 4D vs 3D map antigen stress",
+         "value": 0.84, "unit": None},
+    ],
+    "conflicts": [],
+    "coverage_gaps": [
+        "Exact numerical values for Log2 standard deviation, Mean RMSE, and "
+        "Total map stress are referenced but not extracted.",
+        "Underlying data points or sample sizes for each panel are not "
+        "captured.",
+        "No textual records are available to corroborate or expand on figure "
+        "findings.",
+    ],
+}
+
+
 class StubProvider:
-    """Returns fixed, hand-verified answers instead of calling a model."""
+    """Replays fixed answers instead of calling a model.
+
+    Every payload but one was read out of the source by hand; ``H5_*`` is a
+    recorded reply from a live model, kept verbatim.
+    """
 
     name = "stub"
     API_STYLE = "stub"
@@ -215,11 +284,14 @@ class StubProvider:
         stage = (meta or {}).get("stage", "extract")
         doc_id = (meta or {}).get("doc_id", "")
         scatter = doc_id.startswith("opa-scatter")
+        published = doc_id.startswith("h5-titre")
         if stage == "ocr":
-            payload = json.dumps(OPA_FIGURE_OCR if scatter else FIGURE_OCR)
+            payload = json.dumps(H5_FIGURE_OCR if published else
+                                 OPA_FIGURE_OCR if scatter else FIGURE_OCR)
         elif stage == "aggregate":
-            payload = json.dumps(OPA_AGGREGATE if scatter else AGGREGATE)
-        elif scatter or doc_id.startswith("naca-figure"):
+            payload = json.dumps(H5_AGGREGATE if published else
+                                 OPA_AGGREGATE if scatter else AGGREGATE)
+        elif scatter or published or doc_id.startswith("naca-figure"):
             payload = json.dumps({"records": []})
         else:
             payload = json.dumps({"records": PDF_RECORDS})
@@ -282,7 +354,7 @@ def main() -> int:
     )
     summary = run_job(
         settings, source_name="folder",
-        source_params={"input_dir": str(DEMO), "extensions": [".pdf", ".png"]},
+        source_params={"input_dir": str(DEMO), "extensions": [".pdf", ".png", ".jpg"]},
         out_dir=str(results), resume=False, job_id="demo",
     )
     shutil.rmtree(DEMO / ".cache", ignore_errors=True)

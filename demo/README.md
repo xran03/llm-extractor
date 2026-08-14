@@ -1,6 +1,6 @@
 # Demo
 
-Three inputs and the output they produce, so you can see the artifact shapes
+Four inputs and the output they produce, so you can see the artifact shapes
 before spending a token.
 
 | File | What it is |
@@ -8,7 +8,8 @@ before spending a token.
 | `naca-report-1372-excerpt.pdf` | 3-page excerpt of a 1958 scanned technical report |
 | `naca-figure-2.png` | one chart cropped out of that report |
 | `opa-scatter.png` | a scatter plot of vaccine titers, drawn for this demo |
-| `results/` | reference output for all three |
+| `h5-titre-histogram-scatter.jpg` | a real published figure: a titre histogram and two scatter plots |
+| `results/` | reference output for all four |
 
 The first two come from **NACA Report 1372**, *A Method of Computing the Transient
 Temperature of Thick Walls from Arbitrary Variation of Adiabatic-Wall
@@ -20,6 +21,15 @@ is pages 887–889; the PNG is Figure 2 from page 888.
 `opa-scatter.png` is ours: `_make_opa_scatter.py` draws it, so it can be
 redistributed freely and what is printed on it is known exactly rather than
 squinted at.
+
+`h5-titre-histogram-scatter.jpg` is Extended Data Fig. 1 of Kok, A. *et al.*,
+*A vaccine central in A(H5) influenza antigenic space confers broad immunity*,
+**Nature** (2025), [doi:10.1038/s41586-025-09626-3](https://doi.org/10.1038/s41586-025-09626-3)
+([PMC12657240](https://europepmc.org/article/PMC/PMC12657240)). It is reproduced
+unmodified under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It
+is here because the three files above it were all made or chosen by us, and a
+demo that only ever meets figures of its own making is not evidence of
+anything.
 
 ## Why this document
 
@@ -109,7 +119,44 @@ printed means, bar heights, table cells, axis annotations — and the reference
 output says so in its own `notes` and `coverage_gaps` rather than quietly
 returning three rows and letting you assume that was everything.
 
-## About `results/`
+## The same channel on a figure we did not draw
+
+`opa-scatter.png` is the favourable case, and it is favourable because *we*
+drew it: the group means are printed on it as text, so reading them is reading
+words. `h5-titre-histogram-scatter.jpg` is the ordinary case — a real published
+figure, six panels, a histogram of log₂ standard deviation of HI titres in
+panel **a** and scatter plots in panels **e** and **f**.
+
+Here is the whole of what the vision pass returned for it:
+
+| what came back | count |
+|---|---|
+| `items` (the structured readings) | **0** |
+| `tables` | 0 |
+| `text_blocks` | 20 |
+
+`figures.csv` therefore gets one row for the figure with every value column
+empty, and `records.csv` gets nothing at all. Not one of the several hundred
+plotted points was recovered, and neither were the histogram bar heights.
+
+The two numbers this figure actually states in print, `R2 = 0.93` and
+`R2 = 0.84`, *were* read — but they arrived as loose entries in `text_blocks`
+rather than as items with a value, so the only artifact that carries them
+forward is the aggregation agent's `figure_insights`. Anyone reading
+`figures.csv` never sees them.
+
+One label came back wrong: the figure prints "Mean RMSE (detectable titers)"
+and the model returned "Mean RMSE (recodable titres)". It is kept in
+`results/` as returned. A vision pass makes transcription errors that look
+exactly like correct answers, and a demo that quietly corrects them is telling
+you about its author rather than about the tool.
+
+So the honest summary of this channel: it reads what a figure **writes** —
+printed means, table cells, axis labels, captions — and it does not measure
+what a figure **draws**. When the numbers exist only as ink at a position, as
+in a scatter plot or a histogram, expect labels back and no data.
+
+
 
 It was produced by running the **real pipeline** (real ingest, schema coercion,
 grounding checks and CSV writing) against a stub that returns fixed answers
@@ -119,10 +166,14 @@ instead of a model, so the demo is reproducible and costs nothing:
 python demo/_make_reference_output.py
 ```
 
-The numbers were read out of the source by hand, and grounding is still computed
-for real — if a quoted span were not actually in the PDF, `_grounded` would come
-back false. Every record in `results/` is grounded, which is the pipeline's own
-verdict, not a claim.
+The numbers were read out of the source by hand — with one deliberate
+exception. The payload for `h5-titre-histogram-scatter.jpg` is the **verbatim
+reply of a live vision model**, recorded once and replayed, so that at least
+one document in this folder shows what really comes back rather than what we
+would have written down. Grounding is still computed for real either way — if a
+quoted span were not actually in the PDF, `_grounded` would come back false.
+Every record in `results/` is grounded, which is the pipeline's own verdict,
+not a claim.
 
-A live model on the same inputs will find more records and word them
+A live model on the other inputs will find more records and word them
 differently. The **shape** is what this folder is showing you.

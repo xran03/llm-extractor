@@ -54,6 +54,14 @@ class DemoAssetTest(unittest.TestCase):
             size_kb = (DEMO / name).stat().st_size / 1024
             self.assertLess(size_kb, 600, f"{name} is {size_kb:.0f} KB")
 
+    def test_the_published_figure_is_present_and_attributed(self):
+        # It is reproduced under CC BY, which obliges the demo to name the
+        # source; losing the credit would make redistribution non-compliant.
+        self.assertTrue((DEMO / "h5-titre-histogram-scatter.jpg").is_file())
+        readme = (DEMO / "README.md").read_text(encoding="utf-8")
+        self.assertIn("10.1038/s41586-025-09626-3", readme)
+        self.assertIn("creativecommons.org/licenses/by/4.0", readme)
+
 
 class DemoResultsTest(unittest.TestCase):
     """Reference output must stay consistent with the code that writes it."""
@@ -102,6 +110,20 @@ class DemoResultsTest(unittest.TestCase):
             (RESULTS / "naca-report-1372-excerpt.document.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["generated_at"], 0)
         self.assertEqual(payload["stats"]["duration_s"], 0.0)
+
+    def test_the_published_figure_reading_is_kept_as_it_came_back(self):
+        """A live model recovered no data from it; tidying that up would lie.
+
+        This artifact is the one payload in ``results/`` that was not written
+        by hand, so it is the one that can stop the demo drifting into
+        flattery.
+        """
+        payload = json.loads(
+            (RESULTS / "h5-titre-histogram-scatter.ocr.json").read_text(encoding="utf-8"))
+        reading = payload[0]["ocr"]
+        self.assertEqual(reading["items"], [])
+        self.assertEqual(reading["tables"], [])
+        self.assertIn("R2 = 0.93", reading["text_blocks"])
 
     def test_csv_columns_match_the_current_generic_template(self):
         from llm_extractor.serialize import record_columns

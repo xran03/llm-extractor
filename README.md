@@ -378,9 +378,16 @@ tokens. Under the strict figure schema every value costs roughly thirty tokens
 once its label, series and unit are included, which works out at about 150
 values per figure. A very dense figure — a dot plot with a point per subject,
 say — does not fit, and what comes back is the part the model chose to report
-rather than everything that is plotted. Treat this channel as a reader of
-labelled values (bar heights, table cells, plotted means, axis annotations)
-rather than as a way to recover a whole distribution.
+rather than everything that is plotted.
+
+The cap is rarely the binding constraint, though. On
+[`demo/h5-titre-histogram-scatter.jpg`](demo/h5-titre-histogram-scatter.jpg), a
+published figure carrying a titre histogram and two scatter plots, this channel
+returned twenty text blocks and **zero** items: it read the panel labels and
+the two printed R² values, and measured nothing. Treat this channel as a reader
+of what a figure *writes* — bar heights it labels, table cells, plotted means,
+axis annotations — and not as a way to recover values that exist only as ink at
+a position. `demo/README.md` shows that reading in full.
 
 Two other bounds apply per document: `--max-figures` (20 by default) caps how
 many figures are sent at all, and any image over 12 MB is skipped rather than
@@ -397,8 +404,9 @@ already answered.
 ## Try it
 
 [`demo/`](demo/) ships a public-domain scanned report, one chart cropped out of
-it, and the output both produce — including a value the text layer does not
-contain and only the vision pass recovers.
+it, a scatter plot drawn for the purpose, and a real published figure — with
+the output all four produce, including a value the text layer does not contain
+and only the vision pass recovers, and one figure it recovers nothing from.
 
 ```bash
 llm-extract -i ./demo -o ./demo/out --ocr always

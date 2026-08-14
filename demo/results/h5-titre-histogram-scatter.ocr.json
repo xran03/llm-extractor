@@ -1,0 +1,43 @@
+[
+  {
+    "image": "h5-titre-histogram-scatter.jpg",
+    "path": "demo/h5-titre-histogram-scatter.jpg",
+    "ocr": {
+      "figure_type": "mixed",
+      "caption": null,
+      "axis_x": null,
+      "axis_y": null,
+      "items": [],
+      "tables": [],
+      "text_blocks": [
+        "a",
+        "Number of data points",
+        "Log2 standard deviation",
+        "b",
+        "Mean RMSE (recodable titres)",
+        "Dimension",
+        "c",
+        "R2",
+        "Dimension",
+        "d",
+        "Total map stress",
+        "Dimension",
+        "e",
+        "4D map distances",
+        "3D map distances",
+        "R2 = 0.93",
+        "f",
+        "4D map antigen stress",
+        "3D map antigen stress",
+        "R2 = 0.84"
+      ],
+      "notes": null
+    },
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  }
+]

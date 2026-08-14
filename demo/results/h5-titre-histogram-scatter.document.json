@@ -1,0 +1,109 @@
+{
+  "doc_id": "h5-titre-histogram-scatter",
+  "title": "h5-titre-histogram-scatter",
+  "uri": "demo/h5-titre-histogram-scatter.jpg",
+  "source": "folder",
+  "source_path": "demo/h5-titre-histogram-scatter.jpg",
+  "metadata": {
+    "relative_path": "h5-titre-histogram-scatter.jpg",
+    "bytes": 67224
+  },
+  "stats": {
+    "template": "generic",
+    "api": "stub",
+    "model": "stub-model",
+    "format": "jpeg",
+    "media_type": "image",
+    "ocr_model": "stub-vision",
+    "ocr_policy": "always",
+    "ocr_executed": true,
+    "text_chars": 0,
+    "duration_s": 0.0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "cached_calls": 0,
+    "records": 0,
+    "grounded": 0,
+    "ungrounded": 0,
+    "numeric_records": 0,
+    "values_grounded": 0,
+    "values_ungrounded": 0,
+    "ocr_figures": 1,
+    "ocr_items": 0,
+    "ocr_tables": 0,
+    "ocr_numeric_items": 0
+  },
+  "aggregate": {
+    "summary": "The document presents a mixed figure containing several panels labeled a–f, each apparently showing different statistical metrics related to map dimensions and antigen stress. The figure includes references to metrics such as Log2 standard deviation, Mean RMSE, R2 values, and map stress, comparing 3D and 4D map analyses. No textual records were extracted from the document's main text.",
+    "key_findings": [
+      "R2 = 0.93 for 4D vs 3D map distances (panel e).",
+      "R2 = 0.84 for 4D vs 3D map antigen stress (panel f)."
+    ],
+    "figure_insights": [
+      {
+        "image": "h5-titre-histogram-scatter.jpg",
+        "finding": "R2 value for 4D vs 3D map distances",
+        "value": 0.93,
+        "unit": null
+      },
+      {
+        "image": "h5-titre-histogram-scatter.jpg",
+        "finding": "R2 value for 4D vs 3D map antigen stress",
+        "value": 0.84,
+        "unit": null
+      }
+    ],
+    "conflicts": [],
+    "coverage_gaps": [
+      "Exact numerical values for Log2 standard deviation, Mean RMSE, and Total map stress are referenced but not extracted.",
+      "Underlying data points or sample sizes for each panel are not captured.",
+      "No textual records are available to corroborate or expand on figure findings."
+    ]
+  },
+  "records": [],
+  "figures": [
+    {
+      "image": "h5-titre-histogram-scatter.jpg",
+      "path": "demo/h5-titre-histogram-scatter.jpg",
+      "ocr": {
+        "figure_type": "mixed",
+        "caption": null,
+        "axis_x": null,
+        "axis_y": null,
+        "items": [],
+        "tables": [],
+        "text_blocks": [
+          "a",
+          "Number of data points",
+          "Log2 standard deviation",
+          "b",
+          "Mean RMSE (recodable titres)",
+          "Dimension",
+          "c",
+          "R2",
+          "Dimension",
+          "d",
+          "Total map stress",
+          "Dimension",
+          "e",
+          "4D map distances",
+          "3D map distances",
+          "R2 = 0.93",
+          "f",
+          "4D map antigen stress",
+          "3D map antigen stress",
+          "R2 = 0.84"
+        ],
+        "notes": null
+      },
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached": false
+      }
+    }
+  ],
+  "errors": [],
+  "generated_at": 0
+}
