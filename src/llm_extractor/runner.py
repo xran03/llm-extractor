@@ -164,15 +164,21 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
 
     def _collect(task_result):
         doc_id = task_result.item_id
-        if task_result.status == "ok":
-            outcome = task_result.result
-            summary.ok += 1
+        outcome = task_result.result
+        if task_result.status in ("ok", "error") and outcome is not None \
+                and hasattr(outcome, "records"):
+            # Tally and persist whatever the document did produce, even when it
+            # is being recorded as failed: a partial result is still worth
+            # keeping on disk, it just must not count as a completed document.
             summary.records += len(outcome.records)
             summary.figures += len(outcome.figures)
             summary.prompt_tokens += outcome.stats.get("prompt_tokens", 0)
             summary.completion_tokens += outcome.stats.get("completion_tokens", 0)
             summary.cached_calls += outcome.stats.get("cached_calls", 0)
             _append_tables(outcome)
+
+        if task_result.status == "ok":
+            summary.ok += 1
             store.upsert_task(job_id, doc_id, status=STATUS_OK,
                               content_hash=outcome.stats.get("content_hash"),
                               n_records=len(outcome.records),
@@ -190,16 +196,32 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
         else:
             summary.failed += 1
             summary.errors.append(f"{doc_id}: {task_result.error}")
+            has_outcome = outcome is not None and hasattr(outcome, "records")
             store.upsert_task(job_id, doc_id, status=STATUS_ERROR,
                               error=task_result.error, attempts=task_result.attempts,
+                              n_records=len(outcome.records) if has_outcome else 0,
+                              artifact=(outcome.artifacts.get("document")
+                                        if has_outcome else None),
                               duration=task_result.duration)
             store.bump_job(job_id, "failed")
+
+    def _verdict(outcome) -> str:
+        """Why this document should not count as done, or "" when it is fine.
+
+        A refused provider call is swallowed per chunk so one bad chunk cannot
+        lose the others, so the document comes back whole but empty instead of
+        raising. Left as a success it would enter the resume map by content
+        hash and be skipped by every later run.
+        """
+        errors = list(getattr(outcome, "errors", None) or [])
+        return "; ".join(str(e) for e in errors[:3])
 
     scheduler = scheduler or Scheduler(
         max_workers=settings.max_workers,
         rate_limiter=RateLimiter(rate_limit) if rate_limit else None,
         bus=bus,
     )
+    scheduler.verdict = _verdict
     scheduler.run(_work, documents, job_id=job_id,
                   id_of=lambda d: d.doc_id, on_result=_collect)
 
@@ -207,7 +229,14 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
     provider_cache = getattr(provider, "cache", None)
     summary.cache = provider_cache.summary() if provider_cache is not None else {}
 
-    store.update_job(job_id, status=STATUS_OK, finished_at=time.time())
+    # A run in which nothing succeeded is a failed run, whatever the individual
+    # documents reported; when some succeeded the job stays usable but still
+    # carries why the rest did not.
+    job_error = (f"{summary.failed} of {summary.total} documents failed: "
+                 f"{summary.errors[0]}") if summary.failed else ""
+    job_status = STATUS_ERROR if summary.failed and not summary.ok else STATUS_OK
+    store.update_job(job_id, status=job_status, error=job_error,
+                     finished_at=time.time())
     bus.publish(Event(type=JOB_COMPLETED, job_id=job_id, payload=summary.to_dict()))
 
     summary_path = out_path / "summary.json"

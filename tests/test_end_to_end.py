@@ -182,6 +182,7 @@ class EndToEndTest(unittest.TestCase):
         header = (self.out / "records.csv").read_text(encoding="utf-8-sig").splitlines()[0]
         self.assertEqual(header.strip().split(","),
                          ["doc_id", "doc_title", "subject", "value", "source_span",
+                          "repeat_unit", "repeat_unit_source",
                           "_grounded", "_value_grounded", "_unit_grounded",
                           "_ungrounded"])
 

@@ -32,8 +32,14 @@ dependencies = []
 pdf = ["pypdf>=4.0"]
 render = ["PyMuPDF>=1.24"]
 yaml = ["PyYAML>=6.0"]
-all = ["pypdf>=4.0", "PyMuPDF>=1.24", "PyYAML>=6.0"]
-dev = ["pypdf>=4.0", "PyYAML>=6.0", "build>=1.2"]
+legacy = ["olefile>=0.46", "xlrd>=2.0"]
+all = ["pypdf>=4.0", "PyMuPDF>=1.24", "PyYAML>=6.0", "olefile>=0.46", "xlrd>=2.0"]
+# setuptools and cython are what `setup.py` and `tools/build_wheel.py` tell you
+# to install, and the wheel builder refuses to publish without a compiled core,
+# so leaving them out made the documented release workflow fail on a machine
+# that had followed the documented setup.
+dev = ["pypdf>=4.0", "PyYAML>=6.0", "olefile>=0.46", "xlrd>=2.0", "build>=1.2",
+       "setuptools>=68", "cython>=3.0"]
 
 [project.scripts]
 llm-extract = "llm_extractor.cli:main"
@@ -48,4 +54,5 @@ where = ["src"]
 [tool.setuptools.package-data]
 # The accelerated execution core ships as a compiled extension inside the
 # wheel; source installs simply fall back to the sequential implementation.
-llm_extractor = ["py.typed", "*.pyd", "*.so"]
+# The serotype table is data the resolver cannot work without.
+llm_extractor = ["py.typed", "*.pyd", "*.so", "data/*.csv"]

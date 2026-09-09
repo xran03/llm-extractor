@@ -14,9 +14,10 @@ class AIModelHubProvider(HTTPProvider):
     """Responses-API provider."""
 
     API_STYLE = "responses"
+    INFERENCE_PATH = "/v1/responses"
 
-    def complete(self, messages, model, temperature=0.0, max_tokens=None,
-                 json_schema=None, reasoning_effort=None, **kwargs) -> Completion:
+    def build_payload(self, messages, model, temperature=0.0, max_tokens=None,
+                      json_schema=None, reasoning_effort=None, **kwargs) -> dict:
         instructions, input_blocks = _split_messages(messages)
         payload: dict = {
             "model": model,
@@ -40,8 +41,9 @@ class AIModelHubProvider(HTTPProvider):
                 }
             }
         payload.update(kwargs.get("extra") or {})
+        return payload
 
-        raw = self.request("POST", "/v1/responses", payload)
+    def parse_completion(self, raw: dict) -> Completion:
         return Completion(text=response_text(raw), usage=usage_from(raw), raw=raw)
 
 

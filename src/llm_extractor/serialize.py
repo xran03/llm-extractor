@@ -18,8 +18,14 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from .normalize import parse_number
+
 #: Provenance columns placed before the template's own fields.
 LEADING_COLUMNS = ("doc_id", "doc_title")
+#: Derived columns appended after the template's own fields: resolved from a
+#: reference table rather than read out of the document, so they sit apart from
+#: what the model extracted.
+DERIVED_COLUMNS = ("repeat_unit", "repeat_unit_source")
 #: Audit columns placed after them; these are the anti-hallucination flags.
 #: ``_ungrounded`` comes last because it is the one a reviewer reads: it names
 #: the fields that failed, so a flagged row can be checked without re-reading
@@ -31,16 +37,12 @@ FIGURE_COLUMNS = (
     "axis_x", "axis_y", "series", "label", "value", "value_text", "unit", "note",
 )
 
-#: Written into the note of a figure that yielded nothing, because a row of
-#: empty value columns reads like a figure whose values went missing, and the
-#: model does not reliably say in its own notes that it recovered none.
-NO_READING_NOTE = "no values were read out of this figure"
-
 
 def record_columns(template) -> list:
-    """Stable column order: provenance, template fields, audit flags."""
-    fields = [f for f in template.field_names if f not in LEADING_COLUMNS]
-    return [*LEADING_COLUMNS, *fields, *TRAILING_COLUMNS]
+    """Stable column order: provenance, template fields, derived, audit flags."""
+    skip = set(LEADING_COLUMNS) | set(DERIVED_COLUMNS)
+    fields = [f for f in template.field_names if f not in skip]
+    return [*LEADING_COLUMNS, *fields, *DERIVED_COLUMNS, *TRAILING_COLUMNS]
 
 
 def _cell(value):
@@ -84,10 +86,11 @@ def figure_rows(figures, doc_id: str = "", doc_title: str = "") -> list:
             "axis_y": payload.get("axis_y"),
         }
         items = payload.get("items") or []
-        if not items:
+        table_rows = _table_rows(base, payload.get("tables") or [])
+        if not items and not table_rows:
             rows.append({**base, "label": None, "series": None, "value": None,
                          "value_text": None, "unit": None,
-                         "note": payload.get("notes") or NO_READING_NOTE})
+                         "note": payload.get("notes")})
             continue
         for item in items:
             rows.append({
@@ -99,6 +102,49 @@ def figure_rows(figures, doc_id: str = "", doc_title: str = "") -> list:
                 "unit": item.get("unit"),
                 "note": item.get("note"),
             })
+        rows.extend(table_rows)
+    return rows
+
+
+def _table_rows(base: dict, tables: list) -> list:
+    """One row per table cell — a table printed inside a figure is data too.
+
+    Papers routinely print a statistics table beside the plot it belongs to,
+    and the vision pass reads it into ``tables``. Only ``items`` used to be
+    flattened, so those readings reached ``.ocr.json`` and were counted in the
+    run summary, but never appeared in the table people actually analyse.
+
+    A cell means nothing without its coordinates, so the column header is kept
+    as the label, and the row's own leading cell, when the table has one, is
+    kept in front of it.
+    """
+    rows = []
+    for index, table in enumerate(tables, start=1):
+        columns = list(table.get("columns") or [])
+        # An unnamed table still has to be told apart from the next one, and a
+        # figure often prints several side by side.
+        series = table.get("title") or f"table {index}"
+        for cells in table.get("rows") or []:
+            cells = list(cells or [])
+            row_label = None
+            # A labelled table carries one cell more than it has columns: the
+            # leading cell names the row rather than answering a column.
+            if columns and len(cells) == len(columns) + 1:
+                row_label, cells = cells[0], cells[1:]
+            for position, cell in enumerate(cells):
+                if cell is None or not str(cell).strip():
+                    continue
+                column = columns[position] if position < len(columns) else None
+                label = " / ".join(str(p) for p in (row_label, column) if p)
+                rows.append({
+                    **base,
+                    "series": series,
+                    "label": label or None,
+                    "value": parse_number(cell),
+                    "value_text": str(cell),
+                    "unit": None,
+                    "note": None,
+                })
     return rows
 
 

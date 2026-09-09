@@ -67,6 +67,21 @@ class FolderSourceTest(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertIn("sub__c", ids)
 
+    def test_one_stem_in_two_formats_does_not_share_an_id(self):
+        # Artifacts are named after the id, so a shared id loses a document.
+        write_txt(self.dir, "figure.txt")
+        write_png(self.dir, "figure.png")
+        documents = list(build_source("folder", input_dir=str(self.dir)).iter_documents())
+        ids = [d.doc_id for d in documents]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertIn("figure__txt", ids)
+        self.assertIn("figure__png", ids)
+
+    def test_ids_keep_their_spelling_when_nothing_collides(self):
+        documents = list(build_source("folder", input_dir=str(self.dir)).iter_documents())
+        self.assertEqual(sorted(d.doc_id for d in documents),
+                         ["a", "b", "sub__c", "sub__d"])
+
     def test_extension_filter(self):
         documents = list(build_source("folder", input_dir=str(self.dir),
                                       extensions=[".xml"]).iter_documents())

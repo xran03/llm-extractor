@@ -20,6 +20,7 @@ import io
 import json
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import zipfile
@@ -405,16 +406,20 @@ def read_epub(path: Path) -> str:
 # --------------------------------------------------------------------------
 @reader("doc")
 def read_doc(path: Path) -> str:
-    """Legacy .doc via a local converter, with a clear error when absent.
+    """Legacy .doc: read directly when possible, else via a local converter.
 
     Files carrying a .doc extension are often really RTF or OOXML; those are
-    handled directly, so a converter is only needed for true OLE2 documents.
+    handled directly, so the OLE2 path is only for true binary Word documents.
     """
     header = path.read_bytes()[:8]
     if header.startswith(b"{\\rtf"):
         return read_rtf(path)
     if header.startswith(b"PK\x03\x04"):
         return read_docx(path)
+
+    text = _read_doc_binary(path)
+    if text:
+        return text
 
     if shutil.which("antiword"):
         proc = subprocess.run(["antiword", str(path)], capture_output=True, check=False)
@@ -432,9 +437,139 @@ def read_doc(path: Path) -> str:
                 return decode_bytes(converted.read_bytes())
 
     raise RuntimeError(
-        f"reading legacy .doc requires a converter: install antiword or LibreOffice, "
-        f"or convert {path.name} to .docx/.pdf first"
+        f"reading legacy .doc needs olefile (pip install 'llm-extractor[legacy]') "
+        f"or a converter (antiword/LibreOffice); {path.name} could not be read"
     )
+
+
+def _read_doc_binary(path: Path) -> str:
+    """Text of a binary Word document, via its piece table.
+
+    Word stores the text in runs ("pieces") that are individually either
+    CP1252 or UTF-16, and the piece table is the only thing that says which.
+    Reading the stream straight through instead would interleave the two
+    encodings and produce mojibake in exactly the documents that mix them.
+
+    Returns "" when olefile is absent or the file is not a Word document, so
+    the caller can fall back to a converter.
+    """
+    try:
+        import olefile
+    except ImportError:
+        return ""
+
+    try:
+        with olefile.OleFileIO(path) as ole:
+            if not ole.exists("WordDocument"):
+                return ""
+            stream = ole.openstream("WordDocument").read()
+            # Bit 9 of the FIB flags picks which of the two table streams is live.
+            flags = int.from_bytes(stream[0x0A:0x0C], "little")
+            table_name = "1Table" if (flags >> 9) & 1 else "0Table"
+            if not ole.exists(table_name):
+                return ""
+            table = ole.openstream(table_name).read()
+    except Exception:
+        return ""
+
+    try:
+        pieces = _doc_piece_table(table, stream)
+    except (ValueError, IndexError, struct.error):
+        return ""
+    return _clean_doc_text("".join(pieces))
+
+
+def _doc_piece_table(table: bytes, stream: bytes) -> list:
+    """Decode each text piece with the encoding its descriptor declares."""
+    fc_clx = int.from_bytes(stream[0x01A2:0x01A6], "little")
+    lcb_clx = int.from_bytes(stream[0x01A6:0x01AA], "little")
+    clx = table[fc_clx:fc_clx + lcb_clx]
+
+    plc = b""
+    index = 0
+    while index < len(clx):
+        kind = clx[index]
+        if kind == 0x01:                       # property modifier: skip it
+            size = int.from_bytes(clx[index + 1:index + 3], "little")
+            index += 3 + size
+        elif kind == 0x02:                     # the piece table itself
+            size = int.from_bytes(clx[index + 1:index + 5], "little")
+            plc = clx[index + 5:index + 5 + size]
+            break
+        else:
+            raise ValueError(f"unexpected piece-table entry {kind:#x}")
+    if not plc:
+        raise ValueError("no piece table")
+
+    count = (len(plc) - 4) // 12
+    positions = [int.from_bytes(plc[4 * i:4 * i + 4], "little")
+                 for i in range(count + 1)]
+    out = []
+    base = 4 * (count + 1)
+    for i in range(count):
+        descriptor = plc[base + 8 * i:base + 8 * i + 8]
+        fc = int.from_bytes(descriptor[2:6], "little")
+        # Bit 30 set means the run was stored one byte per character.
+        compressed = bool(fc & 0x40000000)
+        offset = (fc & 0x3FFFFFFF) // 2 if compressed else fc
+        length = positions[i + 1] - positions[i]
+        if length <= 0:
+            continue
+        if compressed:
+            out.append(stream[offset:offset + length].decode("cp1252", "replace"))
+        else:
+            out.append(stream[offset:offset + length * 2].decode("utf-16-le", "replace"))
+    return out
+
+
+#: Control characters Word uses for field marks, footnote anchors and drawing
+#: anchors. They carry no text and would otherwise litter every extraction.
+_DOC_CONTROLS = dict.fromkeys(
+    [0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x13, 0x14, 0x15, 0x1E, 0x1F], None)
+
+
+def _clean_doc_text(text: str) -> str:
+    text = text.translate(_DOC_CONTROLS)
+    # Word ends a paragraph with CR, and marks cell and row ends with BEL.
+    text = text.replace("\r", "\n").replace("\x07", "\t")
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+# --------------------------------------------------------------------------
+# Legacy Excel
+# --------------------------------------------------------------------------
+@reader("xls")
+def read_xls(path: Path) -> str:
+    """Every sheet of a legacy workbook flattened to delimited rows."""
+    try:
+        import xlrd
+    except ImportError as exc:
+        raise RuntimeError(
+            f"reading legacy .xls needs xlrd (pip install 'llm-extractor[legacy]'); "
+            f"{path.name} could not be read"
+        ) from exc
+
+    try:
+        book = xlrd.open_workbook(str(path))
+    except Exception as exc:
+        raise RuntimeError(f"not a readable .xls file: {path}") from exc
+
+    out = []
+    for sheet in book.sheets():
+        out.append(f"--- sheet: {sheet.name} ---")
+        for index in range(sheet.nrows):
+            out.append(row(_xls_cell(c) for c in sheet.row(index)))
+        out.append("")
+    return "\n".join(out).strip()
+
+
+def _xls_cell(cell) -> str:
+    """One cell as text, without turning every integer into a float."""
+    value = cell.value
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return "" if value is None else str(value)
 
 
 # --------------------------------------------------------------------------

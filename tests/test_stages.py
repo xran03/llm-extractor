@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 
 from llm_extractor.agent import aggregate, deterministic_aggregate
-from llm_extractor.extract import (chunk_text, dedupe, extract_records,
+from llm_extractor.extract import (_numeric_fields, chunk_text, dedupe, extract_records,
                                    grounding_summary)
 from llm_extractor.ingest import Document, load_document
 from llm_extractor.ocr import ocr_document, ocr_figure, ocr_summary, ocr_to_text
-from llm_extractor.templates import BUILTIN_TEMPLATES
+from llm_extractor.templates import BUILTIN_TEMPLATES, ExtractionTemplate, empty_ocr_payload
 
 from ._fakes import SAMPLE_TEXT, FakeProvider, write_png
 
@@ -173,6 +173,25 @@ class OcrTest(unittest.TestCase):
         self.assertIn("group A", text)
         self.assertIn("12.5", text)
 
+    def test_a_legend_entry_is_not_given_a_value(self):
+        # A real chart names its series in a legend, and those entries come
+        # back with no reading; "= None" would be a value nothing showed.
+        payload = empty_ocr_payload()
+        payload.update(figure_type="chart", axis_x="Baseline (log2)",
+                       axis_y="Rise (log2)",
+                       items=[{"label": "Seronegative", "series": "Seronegative",
+                               "value": None, "value_text": None, "unit": None,
+                               "note": "Triangle markers"}])
+        text = ocr_to_text([{"image": "f.png", "ocr": payload}])
+        self.assertNotIn("None", text)
+        self.assertIn("Seronegative", text)
+        self.assertIn("Triangle markers", text)
+
+    def test_a_zero_reading_is_still_written_out(self):
+        payload = empty_ocr_payload()
+        payload.update(items=[{"label": "baseline", "value": 0, "unit": "deg F"}])
+        self.assertIn("= 0 deg F", ocr_to_text([{"image": "f.png", "ocr": payload}]))
+
     def test_ocr_summary_counts_numeric_items(self):
         outcome = ocr_figure(self.provider, write_png(self.dir), model="v")
         self.assertEqual(ocr_summary([outcome])["numeric_items"], 2)
@@ -227,6 +246,37 @@ class AgentTest(unittest.TestCase):
         content = self.provider.stage_calls("aggregate")[0]["messages"][1]["content"]
         payload = json.loads(content[content.index("{"):])
         self.assertNotIn("_grounded", payload["TEXT_RECORDS"][0])
+
+
+class NumericFieldSelectionTest(unittest.TestCase):
+    """Only fields the record's own span should evidence are checked."""
+
+    def _template(self):
+        return ExtractionTemplate.from_dict({
+            "name": "t",
+            "fields": [
+                {"name": "value", "type": "number", "description": "the reading"},
+                {"name": "n_subjects", "type": "integer", "description": "cohort size",
+                 "grounded": False},
+                {"name": "rounds", "type": "integer", "description": "bookkeeping",
+                 "grounded": False},
+                {"name": "source_span", "type": "string", "description": "quote"},
+            ],
+        })
+
+    def test_ungrounded_fields_are_not_checked(self):
+        self.assertEqual(_numeric_fields(self._template()), ("value",))
+
+    def test_bookkeeping_field_cannot_fail_a_whole_record(self):
+        """A field never written in the document must not sink every record."""
+        from llm_extractor.normalize import annotate_grounding
+        template = self._template()
+        text = "The titer reached 12.5 in the treated group."
+        record = {"value": 12.5, "n_subjects": 315, "rounds": 0,
+                  "source_span": "The titer reached 12.5"}
+        annotate_grounding(record, text, numeric_fields=_numeric_fields(template))
+        self.assertTrue(record["_value_grounded"])
+        self.assertEqual(record["_ungrounded"], [])
 
 
 if __name__ == "__main__":

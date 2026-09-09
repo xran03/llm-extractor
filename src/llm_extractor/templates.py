@@ -39,6 +39,12 @@ class Field:
     type: str = "string"          # string | number | integer | boolean
     description: str = ""
     enum: list | None = None
+    #: Whether ``source_span`` is meant to evidence this field. A record's span
+    #: quotes the measurement, so study-level context (subject counts, vaccine
+    #: valency) and pipeline bookkeeping are stated elsewhere or nowhere at all;
+    #: checking them against the span reports a failure for every record and
+    #: drowns out the fabricated value the check exists to find.
+    grounded: bool = True
 
     def json_type(self) -> dict:
         # Nullable everywhere: strict structured output requires each property to
@@ -117,7 +123,8 @@ class ExtractionTemplate:
             "fields": [
                 {k: v for k, v in
                  {"name": f.name, "type": f.type, "description": f.description,
-                  "enum": f.enum}.items() if v is not None}
+                  "enum": f.enum,
+                  "grounded": None if f.grounded else False}.items() if v is not None}
                 for f in self.fields
             ],
         }
@@ -139,7 +146,7 @@ class ExtractionTemplate:
 RESERVED_FIELD_NAMES = {"doc_id", "doc_title", "_grounded", "_value_grounded",
                         "_unit_grounded", "_ungrounded"}
 ALLOWED_FIELD_TYPES = {"string", "number", "integer", "boolean"}
-ALLOWED_FIELD_KEYS = {"name", "type", "description", "enum"}
+ALLOWED_FIELD_KEYS = {"name", "type", "description", "enum", "grounded"}
 
 
 class TemplateError(ValueError):
@@ -202,6 +209,11 @@ def validate_template_dict(data) -> dict:
                 raise TemplateError(
                     f"{where} ('{name}'): 'enum' is only supported on string fields"
                 )
+
+        if "grounded" in field_def and not isinstance(field_def["grounded"], bool):
+            raise TemplateError(
+                f"{where} ('{name}'): 'grounded' must be true or false"
+            )
 
     missing_keys = [k for k in (data.get("key_fields") or []) if k not in seen]
     if missing_keys:

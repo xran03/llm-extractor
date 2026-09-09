@@ -7,6 +7,7 @@ import os
 import stat
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -224,14 +225,18 @@ class CliLoginTest(StoreTestCase):
         self.assertNotIn("top-secret-value", output)
 
     def test_login_without_a_terminal_or_key_is_a_usage_error(self):
-        code, output = self._run(["login", "--api", "llmhub", "--base-url", "https://gw"])
+        # State the condition instead of inheriting the runner's stdin: in a
+        # real terminal this would prompt and block rather than fail.
+        with unittest.mock.patch.object(cli, "_interactive", return_value=False):
+            code, output = self._run(["login", "--api", "llmhub", "--base-url", "https://gw"])
         self.assertEqual(code, 2)
         self.assertIn("api-key", output)
         self.assertFalse(credstore.store_path().exists())
 
     def test_login_without_a_base_url_is_a_usage_error(self):
-        code, output = self._run(["login", "--api", "llmhub", "--api-key", "k",
-                                  "--no-verify"])
+        with unittest.mock.patch.object(cli, "_interactive", return_value=False):
+            code, output = self._run(["login", "--api", "llmhub", "--api-key", "k",
+                                      "--no-verify"])
         self.assertEqual(code, 2)
         self.assertIn("base URL", output)
 
@@ -262,7 +267,9 @@ class CliLoginTest(StoreTestCase):
     def test_check_reports_the_saved_key_without_revealing_it(self):
         self._run(["login", "--api", "llmhub", "--base-url", "https://gw",
                    "--api-key", "top-secret-value", "--no-verify"])
-        _, output = self._run(["check", "--api", "llmhub"])
+        # --no-verify: this asserts on what `check` prints, not on reachability,
+        # and an unresolvable host would otherwise stall the suite.
+        _, output = self._run(["check", "--api", "llmhub", "--no-verify"])
         self.assertIn("saved key", output)
         self.assertNotIn("top-secret-value", output)
 
@@ -271,7 +278,14 @@ class ImplicitPromptTest(StoreTestCase):
     """The paste prompt must never block a script, CI job or pipe."""
 
     def test_not_interactive_when_stdin_is_not_a_terminal(self):
-        self.assertFalse(cli._interactive())
+        with unittest.mock.patch("sys.stdin") as stdin:
+            stdin.isatty.return_value = False
+            self.assertFalse(cli._interactive())
+
+    def test_interactive_when_stdin_is_a_terminal(self):
+        with unittest.mock.patch("sys.stdin") as stdin:
+            stdin.isatty.return_value = True
+            self.assertTrue(cli._interactive())
 
     def test_run_does_not_prompt_without_a_terminal(self):
         calls = []
@@ -285,7 +299,10 @@ class ImplicitPromptTest(StoreTestCase):
         try:
             with tempfile.TemporaryDirectory() as docs:
                 buffer = io.StringIO()
-                with redirect_stdout(buffer), redirect_stderr(buffer):
+                # Force the no-terminal condition rather than inheriting the
+                # runner's stdin, which is a terminal when run by hand.
+                with unittest.mock.patch.object(cli, "_interactive", return_value=False), \
+                        redirect_stdout(buffer), redirect_stderr(buffer):
                     cli.main(["run", "-i", docs, "--api", "llmhub",
                               "--cache-dir", str(Path(docs) / "c")])
         finally:

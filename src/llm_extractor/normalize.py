@@ -20,7 +20,24 @@ import re
 from difflib import SequenceMatcher
 
 # Matches integers/decimals with thousands separators and scientific notation.
-_NUMBER_RE = re.compile(r"[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?")
+#
+# A thousands group is exactly three digits, and may not be followed by a fourth
+# (``(?!\d)``). Both halves of that rule matter for evidence written as a
+# compact list: in "5,094,5,227" a lax ``\d[\d,]*`` swallows the commas and
+# yields one 16-digit number, so a value that is plainly quoted in the source is
+# judged ungrounded. Digit runs without separators are matched by the second
+# branch, which is why the strict branch comes first.
+#
+# A leading sign is only a sign when a digit does not precede it. Papers write
+# ranges with a plain hyphen ("10-15%", "95% CI 1.2-3.4"), so reading that
+# hyphen as a minus turns the upper bound into a negative number that is absent
+# from its own evidence, and every range record is then reported as ungrounded.
+# An en dash never had this problem, which is why only the ASCII form needs the
+# guard.
+_NUMBER_PATTERN = (
+    r"(?:(?<![\d.])[-+])?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?(?:[eE][-+]?\d+)?"
+)
+_NUMBER_RE = re.compile(_NUMBER_PATTERN)
 
 #: Fraction of a quoted span that must be found in the document for the span to
 #: count as grounded. Below 1.0 so that whitespace, hyphenation and OCR noise do
@@ -152,19 +169,10 @@ def span_is_grounded(span, doc_text: str, min_coverage: float = SPAN_COVERAGE_TH
     * enough of its words must appear, so a substituted label is rejected;
     * enough of its characters must match, which is what tolerates whitespace,
       hyphenation and OCR damage in an otherwise genuine quote.
-
-    A quote made only of digits is refused before any of that. It cannot fail
-    the check, and a test nothing can fail certifies nothing.
     """
     needle = canon_text(span).lower()
     haystack = canon_text(doc_text).lower()
     if not needle or not haystack:
-        return False
-    if not any(character.isalpha() for character in needle):
-        # "1" occurs in almost every document, so locating it says nothing
-        # about whether the document states the record it is offered for.
-        # Axis tick labels reach the extractor in exactly this shape, and were
-        # being certified as grounded on the strength of a one-character match.
         return False
     if needle in haystack:
         return True
@@ -344,7 +352,7 @@ _UNIT_ALIASES = {
 
 #: A number immediately followed by its unit, e.g. "1.23 µg/mL", "45 %".
 _NUMBER_UNIT_RE = re.compile(
-    r"(?P<number>[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?)"
+    r"(?P<number>" + _NUMBER_PATTERN + r")"
     r"\s*"
     r"(?P<unit>%|[A-Za-z\u00b5\u03bc\ufffd]+(?:\s*/\s*[A-Za-z\u00b5\u03bc\ufffd0-9]+)*)?"
 )

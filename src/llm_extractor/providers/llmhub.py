@@ -13,9 +13,10 @@ class LLMHubProvider(HTTPProvider):
     """Chat-completions provider."""
 
     API_STYLE = "chat.completions"
+    INFERENCE_PATH = "/v1/chat/completions"
 
-    def complete(self, messages, model, temperature=0.0, max_tokens=None,
-                 json_schema=None, reasoning_effort=None, **kwargs) -> Completion:
+    def build_payload(self, messages, model, temperature=0.0, max_tokens=None,
+                      json_schema=None, reasoning_effort=None, **kwargs) -> dict:
         payload: dict = {
             "model": model,
             "messages": [_to_chat_message(m) for m in messages],
@@ -36,8 +37,9 @@ class LLMHubProvider(HTTPProvider):
                 },
             }
         payload.update(kwargs.get("extra") or {})
+        return payload
 
-        raw = self.request("POST", "/v1/chat/completions", payload)
+    def parse_completion(self, raw: dict) -> Completion:
         choices = raw.get("choices") or [{}]
         text = (choices[0].get("message", {}) or {}).get("content") or ""
         if isinstance(text, list):  # some gateways return content parts

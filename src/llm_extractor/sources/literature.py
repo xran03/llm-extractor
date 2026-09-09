@@ -31,7 +31,10 @@ class EuropePMCSource(RestSource):
         "paging": "page",
         "page_param": "page",
         "size_param": "pageSize",
-        "page_size": 25,
+        # Europe PMC accepts pageSize up to 1000; 100 keeps `resultType=core`
+        # responses (full abstracts) a reasonable size while cutting the
+        # request count 4x versus the old default of 25.
+        "page_size": 100,
         "auth": "none",
     }
 
@@ -70,7 +73,8 @@ class OpenAlexSource(RestSource):
         "cursor_param": "cursor",
         "cursor_path": "meta.next_cursor",
         "size_param": "per-page",
-        "page_size": 50,
+        # 200 is the OpenAlex maximum (per-page=201 is a pagination error).
+        "page_size": 200,
         "auth": "none",
     }
 

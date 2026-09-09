@@ -2,9 +2,10 @@
   "name": "conjugate_titer",
   "description": "Antibody titer measurements from conjugate-vaccine literature (pneumococcal, E. coli, GBS), keyed for later clustering by study batch, species and assay.",
   "system_prompt": "You are a meticulous document data-extraction agent working on vaccine immunogenicity literature. You extract ONLY facts explicitly stated in the provided material. You never guess, never infer unstated values, and you always quote your evidence verbatim. If a field is unknown, use null - null is always better than a plausible guess.",
-  "instructions": "Extract every explicitly reported antibody TITER or CONCENTRATION measurement and emit ONE JSON array.\n\nONE RECORD = one value, for one group, for one serotype, at one timepoint, from one assay.\n\nRules that matter most:\n(A) NEVER merge OPA and IgG. They are different assays with different units and are never interchangeable. Set assay accordingly; if the text does not say which, use 'na' rather than guessing.\n(B) NEVER pack serotype, species, dose or timepoint into group_label. Each gets its own field, so records can be grouped later.\n(C) species is the animal or population actually assayed - infant/adult human, mouse, rabbit, or non-human primate. Record it even when it is only stated once in the methods.\n(D) study_batch identifies the experiment the record came from: the study/trial name, lot, or experiment label as written. Records sharing a batch will be clustered together, so copy it exactly and consistently.\n(E) NEGATIVE RESULTS ARE DATA AND MUST BE EXTRACTED. A vaccine that failed to raise a response is as informative as one that succeeded, and dropping such records silently biases everything computed from this table. Extract them as full records:\n   - 'titer <1:8', '<0.05 ug/mL', 'below the limit of detection' -> value = the limit itself (0.05), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same limit.\n   - 'the OPA titer was 1', 'did not elicit detectable antibodies', 'no response' -> value = that floor value (1), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same floor.\n   - 'no significant rise from baseline', 'p = 0.42' -> censoring = 'observed', response_status = 'not_significant', with the reported value.\n   - a value that is real but below a protective threshold (e.g. 0.20 against a 0.35 ug/mL threshold) -> censoring = 'observed', response_status = 'non_responder'.\n   - an assay that was planned but never run, or a value simply absent -> response_status = 'not_measured', value = null. Never confuse this with a measured negative: 'not measured' and 'measured and found absent' are different facts.\n(F) value IS THE MEASUREMENT, NEVER A COUNT OF SUBJECTS. In 'detectable titers were found in 28 (52%) of patients', 28 is n_subjects and 52 is a percentage of responders - neither is a titer. Put 28 in n_subjects, and only record a value if the titer itself is stated. If the sentence gives a proportion rather than a titer, set value to that proportion and value_kind = 'percent_responders'.\n(G) value_unit is a UNIT, such as 'ug/mL', 'OPA titer' or '%'. It is never a sentence, a definition, or a phrase containing '='. If no unit is written, use null.\n(H) censoring and response_status MUST be one of the listed enum values, exactly. Do not invent new ones. If none applies, use 'na'.\n(I) value_source says where the number physically came from: running text, a table, or a figure. Be accurate - a figure reading is checked against the vision pass.\n(J) Report the number exactly as printed, including its unit. Do not convert units.",
+  "instructions": "Extract every explicitly reported antibody TITER or CONCENTRATION measurement and emit ONE JSON array.\n\nONE RECORD = one value, for one group, for one serotype, at one timepoint, from one assay.\n\nRules that matter most:\n(A) NEVER merge OPA and IgG. They are different assays with different units and are never interchangeable. Set assay accordingly; if the text does not say which, use 'na' rather than guessing.\n(B) NEVER pack serotype, species, dose or timepoint into group_label. Each gets its own field, so records can be grouped later.\n(C) species is the animal or population actually assayed - infant/adult human, mouse, rabbit, or non-human primate. Record it even when it is only stated once in the methods.\n(D) study_batch identifies the experiment the record came from: the study/trial name, lot, or experiment label as written. Records sharing a batch will be clustered together, so copy it exactly and consistently.\n(E) NEGATIVE RESULTS ARE DATA AND MUST BE EXTRACTED. A vaccine that failed to raise a response is as informative as one that succeeded, and dropping such records silently biases everything computed from this table. Extract them as full records:\n   - 'titer <1:8', '<0.05 ug/mL', 'below the limit of detection' -> value = the limit itself (0.05), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same limit.\n   - 'the OPA titer was 1', 'did not elicit detectable antibodies', 'no response' -> value = that floor value (1), censoring = 'left_censored', response_status = 'undetectable', detection_limit = the same floor.\n   - 'no significant rise from baseline', 'p = 0.42' -> censoring = 'observed', response_status = 'not_significant', with the reported value.\n   - a value that is real but below a protective threshold (e.g. 0.20 against a 0.35 ug/mL threshold) -> censoring = 'observed', response_status = 'non_responder'.\n   - an assay that was planned but never run, or a value simply absent -> response_status = 'not_measured', value = null. Never confuse this with a measured negative: 'not measured' and 'measured and found absent' are different facts.\n(F) value IS THE MEASUREMENT, NEVER A COUNT OF SUBJECTS. In 'detectable titers were found in 28 (52%) of patients', 28 is n_subjects and 52 is a percentage of responders - neither is a titer. Put 28 in n_subjects, and only record a value if the titer itself is stated. If the sentence gives a proportion rather than a titer, set value to that proportion and value_kind = 'percent_responders'.\n(G) value_unit is a UNIT, such as 'ug/mL', 'OPA titer' or '%'. It is never a sentence, a definition, or a phrase containing '='. If no unit is written, use null.\n(H) censoring and response_status MUST be one of the listed enum values, exactly. Do not invent new ones. If none applies, use 'na'.\n(I) value_source says where the number physically came from: running text, a table, or a figure. Be accurate - a figure reading is checked against the vision pass.\n(J) Report the number exactly as printed, including its unit. Do not convert units.\n(K) RECORD HOW THE VALUE WAS MEASURED. An 'IgG GMC' from a WHO reference ELISA, from a direct Luminex immunoassay (dLIA) and from an electrochemiluminescence assay are not the same quantity, and an OPA titer from a multiplexed killing assay is not the same as one from a single-serotype assay. Put the normalised technology in assay_platform, the paper's own name for it in assay_platform_detail, the reference serum in assay_standard, and the laboratory in assay_lab. These are usually stated once in the methods and apply to every record from that study - carry them over. If the paper does not say, use 'na'; never infer the platform from the manufacturer.",
   "key_fields": [
     "assay",
+    "assay_platform",
     "serotype",
     "group_label",
     "timepoint",
@@ -84,7 +85,8 @@
     {
       "name": "n_subjects",
       "type": "integer",
-      "description": "Number of subjects or animals contributing to this value, else null."
+      "description": "Number of subjects or animals contributing to this value, else null.",
+      "grounded": false
     },
     {
       "name": "timepoint",
@@ -99,7 +101,8 @@
     {
       "name": "dose_ug",
       "type": "number",
-      "description": "Antigen dose in micrograms, else null."
+      "description": "Antigen dose in micrograms, else null.",
+      "grounded": false
     },
     {
       "name": "value",
@@ -162,12 +165,14 @@
     {
       "name": "detection_limit",
       "type": "number",
-      "description": "The assay's stated limit of detection or quantification, in value_unit. Needed to rank censored values correctly instead of treating them as zero."
+      "description": "The assay's stated limit of detection or quantification, in value_unit. Needed to rank censored values correctly instead of treating them as zero.",
+      "grounded": false
     },
     {
       "name": "response_threshold",
       "type": "number",
-      "description": "Protective or seroconversion threshold the study judged responders against, e.g. 0.35 for pneumococcal IgG."
+      "description": "Protective or seroconversion threshold the study judged responders against, e.g. 0.35 for pneumococcal IgG.",
+      "grounded": false
     },
     {
       "name": "carrier",
@@ -187,7 +192,8 @@
     {
       "name": "valency",
       "type": "integer",
-      "description": "Vaccine valency if stated, e.g. 13 for PCV13."
+      "description": "Vaccine valency if stated, e.g. 13 for PCV13.",
+      "grounded": false
     },
     {
       "name": "vaccine_name",
@@ -208,7 +214,8 @@
         "table",
         "figure",
         "na"
-      ]
+      ],
+      "grounded": false
     },
     {
       "name": "figure",
@@ -218,13 +225,15 @@
     {
       "name": "extraction_mode",
       "type": "string",
-      "description": "How the record was obtained. Set by the pipeline, not the model: 'llm' = the text pass read it directly; 'ocr' = read from a figure or table image; 'multimodal' = the cheap passes could not resolve it alone and a stronger multi-input model was given the text, the figures and the tables together to work it out.",
+      "description": "How the record was obtained. Set by the pipeline, not the model: 'llm' = the text pass read it directly; 'ocr' = a vision model read it off a figure or table image, which is an estimate; 'vector_geometry' = it was measured from the PDF's own drawing coordinates against a calibrated axis, which is exact to the precision of the file; 'multimodal' = the cheap passes could not resolve it alone and a stronger multi-input model was given the text, the figures and the tables together to work it out.",
       "enum": [
         "multimodal",
         "llm",
         "ocr",
+        "vector_geometry",
         "na"
-      ]
+      ],
+      "grounded": false
     },
     {
       "name": "escalation_reason",
@@ -269,12 +278,68 @@
     {
       "name": "convergence_rounds",
       "type": "integer",
-      "description": "How many escalation rounds this record needed. 0 means the cheap passes were enough."
+      "description": "How many escalation rounds this record needed. 0 means the cheap passes were enough.",
+      "grounded": false
     },
     {
       "name": "source_span",
       "type": "string",
       "description": "REQUIRED verbatim quote (<=200 chars) from the document supporting this record."
+    },
+    {
+      "name": "geometry_ref",
+      "type": "string",
+      "description": "Set by the pipeline for digitised figure points: the exact address of the marker this row came from, as page:panel:cluster:series:order. Rows sharing a prefix were read from the same panel, so provenance can be clustered without reopening the PDF.",
+      "grounded": false
+    },
+    {
+      "name": "geometry_residual_pt",
+      "type": "number",
+      "description": "Set by the pipeline for digitised figure points: how far the fitted axis places a printed tick from where that tick actually is, in PDF points. The fit is overdetermined, so this is a real measure of whether the scale was read correctly - near zero is trustworthy, a large value means the axis was misread.",
+      "grounded": false
+    },
+    {
+      "name": "geometry_basis",
+      "type": "string",
+      "description": "Set by the pipeline for digitised figure points: what the axis was calibrated against. 'tick marks' means the rules the plotting library drew at the tick values, which is exact. 'tick labels' means the centres of the label text, which carries a small constant offset from the true tick and biases every value on that panel in the same direction - usable, but not exact. 'tick offset shared from this page' means that offset was measured on a sibling panel of the same figure and applied here.",
+      "enum": [
+        "tick marks",
+        "tick labels",
+        "tick offset shared from this page",
+        "na"
+      ],
+      "grounded": false
+    },
+    {
+      "name": "assay_platform",
+      "type": "string",
+      "description": "The measurement technology, as written in the methods. Two labs reporting 'IgG GMC' for the same serotype are often not measuring the same quantity: a WHO reference ELISA, a direct Luminex immunoassay and an electrochemiluminescence assay give systematically different concentrations, and OPA titers from a multiplexed killing assay do not equal those from a single-serotype one. Record what the paper says and nothing more; if the method is not stated, use 'na' rather than assuming the manufacturer's usual platform.",
+      "enum": [
+        "elisa",
+        "luminex",
+        "ecl",
+        "mopa",
+        "opa_single",
+        "flow_cytometry",
+        "agglutination",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "assay_platform_detail",
+      "type": "string",
+      "description": "The platform exactly as named in the paper, e.g. 'WHO reference ELISA 007sp', 'dLIA', 'MSD electrochemiluminescence', 'UAB MOPA', 'Pfizer 4-fold MOPA'. Free text, because the naming is not standardised and a normalised label alone loses the version that makes two studies comparable or not."
+    },
+    {
+      "name": "assay_standard",
+      "type": "string",
+      "description": "The reference serum or calibrator the values are traceable to, e.g. '89-SF', '007sp', 'in-house standard'. Concentrations calibrated against different standards are not directly comparable even on the same platform."
+    },
+    {
+      "name": "assay_lab",
+      "type": "string",
+      "description": "The laboratory or sponsor that ran the assay, when stated. Platform differences often track the lab rather than the paper."
     }
   ]
 }

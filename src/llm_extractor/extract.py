@@ -130,7 +130,14 @@ def extract_records(provider, document, template, model: str,
 
 
 def _numeric_fields(template) -> tuple:
-    return tuple(f.name for f in template.fields if f.type in ("number", "integer"))
+    """Numeric fields whose value the record's own ``source_span`` should show.
+
+    Fields marked ``grounded: false`` are excluded: they hold study context or
+    pipeline bookkeeping rather than the quantity the span quotes, so checking
+    them turns every record into a failure and hides the real one.
+    """
+    return tuple(f.name for f in template.fields
+                 if f.type in ("number", "integer") and f.grounded)
 
 
 def _unit_fields(template) -> tuple:

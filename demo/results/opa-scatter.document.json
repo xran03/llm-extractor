@@ -31,7 +31,24 @@
     "ocr_figures": 1,
     "ocr_items": 3,
     "ocr_tables": 0,
-    "ocr_numeric_items": 3
+    "ocr_truncated": 0,
+    "ocr_numeric_items": 3,
+    "chart_pages": 0,
+    "chart_panels": 0,
+    "chart_points": 0,
+    "chart_worst_residual_pt": 0.0,
+    "chart_prompt_tokens": 0,
+    "chart_completion_tokens": 0,
+    "chart_agreement_checks": null,
+    "chart_disagreements": null,
+    "records_before_reconcile": 0,
+    "records_after_reconcile": 0,
+    "duplicates_merged": 0,
+    "conflicts_flagged": 0,
+    "corroborated_records": 0,
+    "repeat_units_annotated": 0,
+    "repeat_units_from_document": 0,
+    "repeat_units_unknown_serotype": 0
   },
   "aggregate": {
     "summary": "A dot plot of serotype 6B OPA titers 28 days after vaccination in three arms of 34 subjects each. Both conjugate groups responded and the placebo group did not.",
@@ -122,6 +139,7 @@
         ],
         "notes": "Each group plots 34 individual subjects. Only the printed group means are reported: the individual points carry no labels, and a vision model cannot enumerate them reliably."
       },
+      "truncated": false,
       "usage": {
         "prompt_tokens": 0,
         "completion_tokens": 0,

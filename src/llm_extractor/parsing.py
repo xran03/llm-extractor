@@ -3,8 +3,8 @@
 Even with strict structured output, gateways differ: some wrap the payload in
 code fences, some return a bare array, some return ``{"records": [...]}``, and
 a truncated completion yields invalid JSON. This module recovers records from
-all of those, including salvaging complete objects out of a cut-off array — a
-partial result beats losing a whole document.
+all of those, including salvaging complete objects out of a cut-off array, and
+closing a cut-off object — a partial result beats losing a whole document.
 """
 from __future__ import annotations
 
@@ -20,7 +20,12 @@ def strip_fences(text: str) -> str:
 
 
 def extract_json_object(text: str) -> dict:
-    """Return the first JSON object found in ``text`` (``{}`` when none)."""
+    """Return the first JSON object found in ``text`` (``{}`` when none).
+
+    A completion cut off at the output-token limit is salvaged rather than
+    discarded: a figure holding 300 points is exactly the one worth keeping
+    partially, and returning ``{}`` would report it as an empty figure.
+    """
     s = strip_fences(text)
     if not s:
         return {}
@@ -36,7 +41,62 @@ def extract_json_object(text: str) -> dict:
             return obj if isinstance(obj, dict) else {}
         except json.JSONDecodeError:
             pass
+    if start != -1:
+        obj = close_truncated_json(s[start:])
+        if isinstance(obj, dict):
+            obj[TRUNCATED_KEY] = True
+            return obj
     return {}
+
+
+#: Marks a payload recovered from a cut-off completion, so callers can report
+#: it instead of mistaking a partial reading for a complete one.
+TRUNCATED_KEY = "_truncated"
+
+
+def close_truncated_json(s: str):
+    """Parse JSON that was cut off mid-emission by closing what is still open.
+
+    The text is rewound to the last position at which every value already
+    emitted was complete, and the open containers are then closed in order.
+    Returns ``None`` when nothing can be recovered.
+    """
+    stack: list = []
+    safe: tuple | None = None      # (cut index, containers open at that point)
+    in_string = False
+    escaped = False
+
+    for i, ch in enumerate(s):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            safe = (i + 1, tuple(stack))
+        elif ch == ",":
+            # Everything before the separator is a complete element.
+            safe = (i, tuple(stack))
+
+    if safe is None:
+        return None
+    cut, open_containers = safe
+    candidate = s[:cut] + "".join(reversed(open_containers))
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
 
 
 def extract_json_array(text: str, key: str = "records") -> list:

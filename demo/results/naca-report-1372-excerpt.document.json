@@ -31,7 +31,24 @@
     "ocr_figures": 3,
     "ocr_items": 18,
     "ocr_tables": 0,
-    "ocr_numeric_items": 18
+    "ocr_truncated": 0,
+    "ocr_numeric_items": 18,
+    "chart_pages": 0,
+    "chart_panels": 0,
+    "chart_points": 0,
+    "chart_worst_residual_pt": 0.0,
+    "chart_prompt_tokens": 0,
+    "chart_completion_tokens": 0,
+    "chart_agreement_checks": null,
+    "chart_disagreements": null,
+    "records_before_reconcile": 5,
+    "records_after_reconcile": 5,
+    "duplicates_merged": 0,
+    "conflicts_flagged": 0,
+    "corroborated_records": 0,
+    "repeat_units_annotated": 0,
+    "repeat_units_from_document": 0,
+    "repeat_units_unknown_serotype": 0
   },
   "aggregate": {
     "summary": "NACA Report 1372 presents a method for computing transient temperatures of thick walls from an arbitrary history of adiabatic-wall temperature and heat-transfer coefficient. The excerpt works through examples with 1/2-inch and 3-inch copper walls and compares the method against exact theory.",
@@ -80,7 +97,9 @@
       "_grounded": true,
       "_value_grounded": true,
       "_unit_grounded": true,
-      "_ungrounded": []
+      "_ungrounded": [],
+      "repeat_unit": null,
+      "repeat_unit_source": null
     },
     {
       "subject": "example 2 heating history",
@@ -101,7 +120,9 @@
       "_grounded": true,
       "_value_grounded": true,
       "_unit_grounded": null,
-      "_ungrounded": []
+      "_ungrounded": [],
+      "repeat_unit": null,
+      "repeat_unit_source": null
     },
     {
       "subject": "example 3 adiabatic-wall temperature",
@@ -122,7 +143,9 @@
       "_grounded": true,
       "_value_grounded": true,
       "_unit_grounded": null,
-      "_ungrounded": []
+      "_ungrounded": [],
+      "repeat_unit": null,
+      "repeat_unit_source": null
     },
     {
       "subject": "example 3 wall",
@@ -143,7 +166,9 @@
       "_grounded": true,
       "_value_grounded": true,
       "_unit_grounded": true,
-      "_ungrounded": []
+      "_ungrounded": [],
+      "repeat_unit": null,
+      "repeat_unit_source": null
     },
     {
       "subject": "example 3 computing interval",
@@ -164,7 +189,9 @@
       "_grounded": true,
       "_value_grounded": null,
       "_unit_grounded": null,
-      "_ungrounded": []
+      "_ungrounded": [],
+      "repeat_unit": null,
+      "repeat_unit_source": null
     }
   ],
   "figures": [
@@ -237,6 +264,7 @@
         ],
         "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
       },
+      "truncated": false,
       "usage": {
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -313,6 +341,7 @@
         ],
         "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
       },
+      "truncated": false,
       "usage": {
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -389,6 +418,7 @@
         ],
         "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
       },
+      "truncated": false,
       "usage": {
         "prompt_tokens": 0,
         "completion_tokens": 0,

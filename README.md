@@ -17,7 +17,7 @@ llm-extract -i ./docs -o ./out --api llmhub
 | Two API backends | `llmhub` speaks `/v1/chat/completions`; `aimodelhub` speaks the newer `/v1/responses`. One interface, one command. |
 | A table at the end | Records come out as **CSV** (one row per fact, columns fixed by the template) alongside lossless JSONL. |
 | Your own schema | An **extraction template** is a JSON file you write; it becomes the strict JSON Schema sent to the model and the columns of the CSV. |
-| Figures carry the numbers | The vision pass returns **structured JSON** (items, tables, axes), so it merges with text records instead of being prose. |
+| Figures carry the numbers | Vector figures are **measured** from the PDF's own drawing coordinates — one record per plotted point, exact to the file. Where that cannot be calibrated, the vision pass returns **structured JSON** (items, tables, axes) so it merges with text records instead of being prose. |
 | One answer per document | An aggregation agent reconciles the text pass and the OCR pass, flags conflicts, and never invents records. |
 | Cost | Every call is cached by content hash. Re-runs, added files and code iteration are free. |
 | Trust | Records carry `_grounded` / `_value_grounded` / `_unit_grounded`; `llm-extract audit` replays a sample of cached calls and scores them. |
@@ -82,6 +82,37 @@ sequentially, which is fully supported. Check which core is active:
 ```bash
 llm-extract check          # -> execution : accelerated (compiled) | sequential (sequential)
 ```
+
+## Models
+
+Each backend has its own defaults, because a gateway only serves the models it
+hosts — naming one it has never heard of turns a first run into a 404 hunt.
+
+| Role | `aimodelhub` | `llmhub` |
+|---|---|---|
+| extraction, OCR, aggregation | `gpt-5.6-sol` | `gpt-4.1` |
+| review (judging records) | `claude-fable-5` | `gpt-4.1-mini` |
+
+Review deliberately uses a different model family: a second opinion from the
+same model that wrote the answer mostly restates it.
+
+Passing `--model` overrides all the extraction roles at once, so the whole run
+uses what you asked for. Individual roles can still be pinned with
+`--ocr-model`, `--agent-model`, or `LLM_EXTRACTOR_REVIEW_MODEL`.
+
+`llm-extract check` reports which models are configured and whether the gateway
+lists them:
+
+```
+model     : gpt-5.6-sol
+review_model: claude-fable-5
+connectivity: OK (195 models visible)
+models    : claude-fable-5, gpt-5.6-sol all listed
+```
+
+Listing is advisory — some gateways serve aliases and deployments they do not
+list, and a key is often scoped to a subset of what it can see. If a model is
+refused at call time the gateway says which ones the key may use.
 
 ## Credentials
 
@@ -161,6 +192,10 @@ llm-extract -i ./docs -o ./out --api llmhub --model gpt-4.1
 
 # the newer Responses API instead
 llm-extract -i ./docs -o ./out --api aimodelhub
+
+# hand the whole corpus to the gateway's batch queue instead of waiting
+llm-extract batch submit -i ./docs -o ./out
+llm-extract batch fetch  -o ./out --wait
 
 # only some formats, capped, with a rate limit
 llm-extract -i ./docs -o ./out --extensions .pdf,.docx --limit 100 \
@@ -268,6 +303,7 @@ out/
   <doc>.ocr.json               structured vision output per figure
   <doc>.figures.csv            figure readings as a table
   <doc>.document.json          records + figures + aggregate + stats
+  overlays/<doc>-pNNN.overlay.png   digitised points drawn back onto the page
 ```
 
 `records.csv` is the analysis artifact: one row per fact, columns fixed by the
@@ -309,6 +345,33 @@ calls, so they run on everything rather than on a sample:
 (no number, or no unit stated in the evidence) — an unstated unit is reported as
 unknown, never as wrong.
 
+### Derived columns
+
+Two columns are resolved rather than extracted, and sit apart from the model's
+own fields for that reason:
+
+| Column | Meaning |
+|---|---|
+| `repeat_unit` | the capsular repeat unit for the record's serotype |
+| `repeat_unit_source` | `reference table (...)` or `document` |
+
+A capsular measurement is only half-interpretable without the structure it was
+measured on: `12.5 µg/mL` means different things for serotype 3 and 19F, and
+the difference is the repeat unit. Records naming a serotype are annotated from
+the shipped harmonised Danish-type table (105 serotypes):
+
+```
+serotype=19F  src=reference table (full_structure)  unit=→4)-β-D-ManpNAc-(1→4)-α-D-Glcp-(1→2)-α-L-Rhap-…
+serotype=3    src=reference table (full_structure)  unit=→3)-β-D-GlcpA-(1→4)-β-D-Glcp-(1→
+```
+
+A structure the document itself states wins over the table — a paper reporting
+a novel or corrected structure is more current than a static reference — and is
+marked `document`. Lookup is exact after normalising the token (`19f`, `19 F`,
+`serotype 19F` all resolve); an unknown serotype is left empty rather than
+matched to a near neighbour, because attaching 6B's structure to a 6C record
+would be worse than attaching nothing.
+
 The span check is not a substring test: a quote that reproduces a real sentence
 and then appends an invented clause is rejected, as is one that swaps a group
 label or a number, while whitespace, case and OCR damage such as `ug/rnL` for
@@ -316,97 +379,11 @@ label or a number, while whitespace, case and OCR damage such as `ug/rnL` for
 `mg/mL` when the paper said `µg/mL` — a thousand-fold error that a plain number
 comparison passes.
 
-## The vision pass on its own
-
-Numbers in this kind of literature often live only in a figure, so there is a
-second reader: each figure is sent to a vision model that must answer under
-`OCR_JSON_SCHEMA`, returning structured data — items, tables, axis labels, a
-caption, text blocks — rather than prose. That is what lets a figure reading be
-merged with text records instead of ending up as a paragraph nobody can query.
-
-Most runs get this automatically. If you want *only* this channel, turn the
-other work off:
-
-```bash
-# vision only: read every figure, skip the aggregation agent
-llm-extract -i ./docs -o ./out --ocr always --no-aggregate
-
-# pick the vision model separately from the extraction model
-llm-extract -i ./docs -o ./out --ocr always --ocr-model gpt-4.1
-```
-
-The three policies trade cost against recall:
-
-| `--ocr` | when the vision model is called |
-|---|---|
-| `never` | not at all — text only, cheapest |
-| `auto` (default) | when the document has no text layer, when too little text was recovered to be prose, or when the text pass returned nothing or nothing grounded |
-| `always` | for every figure of every document, even when the text pass already succeeded |
-
-`auto` is the one to leave alone for a mixed folder: a born-digital paper whose
-text extracted cleanly never pays for a vision call, while a scanned one falls
-through to it automatically. Reach for `always` when you know the numbers you
-want are plotted rather than written.
-
-### What it writes
-
-The vision pass has its own artifacts, independent of the record table:
-
-```
-out/
-  <doc>.ocr.json     the structured reading of each figure — items, tables,
-                     axis labels, caption, text blocks, notes
-  <doc>.figures.csv  the same thing flattened: one row per value read, with
-                     the image, figure type, axis labels, series and unit
-  figures.csv        every figure value from every document in the run
-```
-
-`figures.csv` is the one to open first; `<doc>.ocr.json` keeps the full nested
-reading for anything the flat table cannot express.
-
-Where figures come from depends on the format, not on the extension: an image
-file is itself the figure, `pptx`/`docx`/`odp`/`epub` have their embedded media
-unpacked, and a PDF has its pages rasterised so a scan can still be read. PDF
-pages are triaged before rendering — a page that draws a graph, embeds a
-picture, or holds too little text to be prose is rendered, and one that is
-plainly prose the text pass already read verbatim is skipped.
-
-### Limits worth knowing
-
-Each figure is read by a single call, and that call is capped at 4,000 output
-tokens. Under the strict figure schema every value costs roughly thirty tokens
-once its label, series and unit are included, which works out at about 150
-values per figure. A very dense figure — a dot plot with a point per subject,
-say — does not fit, and what comes back is the part the model chose to report
-rather than everything that is plotted.
-
-The cap is rarely the binding constraint, though. On
-[`demo/h5-titre-histogram-scatter.jpg`](demo/h5-titre-histogram-scatter.jpg), a
-published figure carrying a titre histogram and two scatter plots, this channel
-returned twenty text blocks and **zero** items: it read the panel labels and
-the two printed R² values, and measured nothing. Treat this channel as a reader
-of what a figure *writes* — bar heights it labels, table cells, plotted means,
-axis annotations — and not as a way to recover values that exist only as ink at
-a position. `demo/README.md` shows that reading in full.
-
-Two other bounds apply per document: `--max-figures` (20 by default) caps how
-many figures are sent at all, and any image over 12 MB is skipped rather than
-uploaded, with the reason recorded in that figure's `notes`.
-
-A figure that fails is contained: it is recorded with an empty reading and the
-document keeps going, because one unreadable figure should never cost a paper.
-
-Every call goes through the same cache as everything else, so re-running a
-folder after changing only the text-side template costs nothing on this side —
-and `llm-extract cache entries --stage ocr` lists what the vision pass has
-already answered.
-
 ## Try it
 
 [`demo/`](demo/) ships a public-domain scanned report, one chart cropped out of
-it, a scatter plot drawn for the purpose, and a real published figure — with
-the output all four produce, including a value the text layer does not contain
-and only the vision pass recovers, and one figure it recovers nothing from.
+it, and the output both produce — including a value the text layer does not
+contain and only the vision pass recovers.
 
 ```bash
 llm-extract -i ./demo -o ./demo/out --ocr always
@@ -457,6 +434,22 @@ Rules the validator enforces, with a message naming the offending field:
 Worked examples live in [`templates/`](templates/). The CSV columns follow the
 template, so changing the schema changes the table.
 
+Two of those examples are meant to be used together on the same corpus:
+`conjugate-titer.json` extracts immunogenicity measurements, and
+`conjugate-characterization.json` extracts the chemistry of the lots that
+produced them — polysaccharide size, degree of activation, saccharide/protein
+input and product ratios, free saccharide and O-acetylation. They are separate
+runs rather than one wide table because a record is only checkable against its
+own evidence: a titer is quoted from the results, while a degree of activation
+is quoted from the methods, so folding both into one record would leave every
+chemistry number unverifiable. Join the two tables afterwards on `study_batch`
+and `serotype`, which both templates instruct the model to copy verbatim.
+
+```bash
+llm-extract -i ./papers -o ./out/titer --template templates/conjugate-titer.json
+llm-extract -i ./papers -o ./out/cmc   --template templates/conjugate-characterization.json
+```
+
 A frontend can send a schema inline instead of shipping a file:
 
 ```bash
@@ -467,6 +460,199 @@ curl -X POST localhost:8080/v1/jobs \
   -d '{"source": "folder", "params": {"input_dir": "./docs"},
        "template": {"name": "t", "fields": [...]}}'
 ```
+
+## Reading figures: measure first, look second
+
+A dot plot of per-subject titers is the hardest thing in a paper to extract and
+the most valuable, because those numbers usually appear nowhere else. Asking a
+vision model to read it does not work at scale: under the strict OCR schema each
+point costs about 29 output tokens, so one reply holds at most ~140 points, and
+the values are eyeballed positions rather than measurements.
+
+But in a born-digital PDF those dots are not a picture. They are drawing
+operators, with coordinates the publisher wrote exactly. So the pipeline
+measures them:
+
+```bash
+llm-extract -i ./docs -o ./out --chart auto     # default
+llm-extract -i ./docs -o ./out --chart never    # vision pass only
+```
+
+Each plotted point becomes one record, with `extraction_mode = vector_geometry`,
+`value_kind = individual`, and a `geometry_ref` of the form
+`p5:panel0:cluster2:#cd3333:#41` that addresses the exact marker it came from —
+so the corpus can be split by provenance later without reopening a PDF.
+
+The split of labour is what keeps it honest:
+
+| | supplies | never supplies |
+|---|---|---|
+| geometry | every **number** | any name |
+| the model | every **name** — serotype, group, timepoint, unit | any number |
+
+The labelling model is not shown a single value, is not asked for one, and its
+response schema contains no numeric field at all. A hallucinated titer therefore
+has no path into the output.
+
+### Refusing is a feature
+
+A figure that cannot be calibrated is left to the vision pass rather than
+guessed at. That is the cheaper mistake by far: an unread figure costs one
+vision call, while a wrongly calibrated one silently poisons every statistic
+computed from it. Pages are refused when there is no monotonic axis, when too
+few markers are found to be a distribution, or when the axis fit is loose.
+
+### The three audits
+
+Replotting the recovered values and comparing them with the original proves
+nothing — the values came from inverting the axis model, so replotting them
+through the same model reproduces it by construction. The checks that carry
+information are the ones that can fail independently:
+
+| check | catches | why it is not circular |
+|---|---|---|
+| **overlay** — detected markers drawn onto the rendered page | picking up error-bar caps, legend keys, glyph fragments | it is compared with the image, not with the model |
+| **calibration residual** — how far the fit puts each tick from where it is | a mis-scaled or mis-paired axis | the fit is overdetermined: 3+ ticks constrain 2 parameters |
+| **cross-channel agreement** — recovered GMT and n vs what the text pass read | the whole channel being wrong | different source, different reader, no shared code |
+
+Calibration prefers the rules the plotting library drew at each tick over the
+tick label text, and every record says which it got in `geometry_basis`. This
+matters more than it sounds: a label's bounding box is centred on its glyphs,
+not on the tick, and that constant offset produces a fit with a near-zero
+residual whose values are uniformly wrong — on a small multiple with a 41-point
+axis, by tens of percent. It is the one error that self-consistency cannot see.
+
+### One measurement, one record
+
+The channels overlap. A titer stated in the prose, plotted in a figure and
+measured off that figure's geometry is one fact read three times, and simply
+concatenating the passes inflates every count taken from the corpus — silently,
+because each duplicate is individually correct.
+
+So records are reconciled before they are written. Two records are the same
+measurement when the template's key fields, the value kind, the unit *and* the
+value all match; the evidence is deliberately not part of that identity, since
+a quoted sentence and a calibrated axis are different justifications for the
+same fact. The surviving record names the channels that agreed with it in
+`corroborated_by` — agreement between independent readers is the best signal in
+the pipeline and is worth keeping.
+
+Where the channels *disagree* about one measurement, both records survive,
+flagged `modality_conflict = value_mismatch` with a note naming the other
+reading. A disagreement is a finding; quietly picking a winner would hide
+exactly the cases worth reviewing.
+
+Individual data points are exempt from conflict handling: two hundred subjects
+in one group share every key field and differ only in their values, which is
+the shape of the data rather than a contradiction.
+
+`assay_platform` is one of the key fields, so an IgG GMC measured by reference
+ELISA is never merged with one measured by dLIA or by electrochemiluminescence.
+Those are different quantities that differ systematically, and treating them as
+one measurement would be a worse error than counting them twice.
+
+### Using the vision pass on its own
+
+Collaborators who only want figures read by a vision model — no geometry, no
+text extraction to pay for — can run that channel alone:
+
+```bash
+# vision only: every figure goes to the vision model, nothing is digitised
+llm-extract -i ./docs -o ./out --ocr always --chart never --no-aggregate
+```
+
+What each switch is doing, and why you may want the other setting:
+
+| switch | effect | when to change it |
+|---|---|---|
+| `--ocr always` | every figure is sent to the vision model, even when the text pass already succeeded | `auto` (default) only calls it when the text pass came back empty or ungrounded — much cheaper |
+| `--chart never` | turns off vector digitisation entirely | leave it at `auto` if you want exact values where they are available; the pages it measures are then withdrawn from the vision pass |
+| `--no-aggregate` | skips the reconciliation agent, saving one call per document | drop it if you want a per-document summary and conflict list |
+
+The vision pass writes its own artifacts, independent of the record table:
+
+```
+out/
+  <doc>.ocr.json     the structured reading of each figure: items, tables,
+                     axis labels, caption, text blocks
+  <doc>.figures.csv  the same thing flattened — one row per value read
+  figures.csv        every figure value from every document
+```
+
+Pick the model with `--ocr-model` (or `LLM_EXTRACTOR_OCR_MODEL`); it does not
+have to be the model doing the text extraction:
+
+```bash
+llm-extract -i ./docs -o ./out --ocr always --chart never --ocr-model gpt-4.1
+```
+
+Two limits are worth knowing before you rely on this channel. Its output is
+capped by `--max-output-tokens`, and under the strict figure schema each value
+costs roughly 29 tokens, so a very dense figure will be cut off — when that
+happens the partial reading is kept and the figure is marked `truncated` in
+`<doc>.ocr.json` rather than being silently reported as empty. And `--max-figures`
+(default 20) bounds how many figures per document are sent at all.
+
+If what you actually want is per-point data out of a vector figure, the vision
+pass is the wrong tool and `--chart` is the right one — see above.
+
+---
+
+## Batch API: hand over the corpus and come back
+
+The live path spends one request per chunk and waits for each. For a few
+thousand documents that is the wrong shape — it burns rate limit, pins a
+process open for hours, and loses the run if the machine sleeps. The
+OpenAI-compatible batch API inverts it: upload every request at once, let the
+gateway work through them within a completion window, then collect.
+
+```bash
+llm-extract batch preflight --api aimodelhub          # can this gateway do it?
+llm-extract batch submit -i ./docs -o ./out --figures # queue text + figures
+llm-extract batch status -o ./out
+llm-extract batch fetch  -o ./out --wait              # collect, write artifacts
+```
+
+`fetch` writes exactly the artifacts a live run writes — same records, same
+CSV columns, same grounding flags — so nothing downstream has to know which
+route produced them.
+
+**Preflight first.** A gateway can expose the batch routes and still be unable
+to run one, because queued input is uploaded as a file and file storage is a
+separate setting:
+
+```
+list batches : ok
+upload files : failed
+detail       : HTTP 500 ... files_settings is not set, set it on your config.yaml
+batch ready  : no
+```
+
+That is a gateway deployment setting, not a client problem, and the command
+says so rather than failing later with a confusing error.
+
+### Why the answers are the hard part
+
+A batch answer arrives hours later carrying nothing but a `custom_id`. The
+document it belonged to, which chunk of it, whether it was text or a figure —
+none of that is in the response. So `submit` writes a manifest recording, for
+every queued request, where its answer belongs, and `fetch` reassembles
+through it. A document split into ten chunks comes back as one record set in
+the original order; a figure comes back attached to its image; one failed
+request is reported without losing the other nine.
+
+Grounding still happens at collect time against the document re-read from
+disk, so a fabricated value is caught in batch mode exactly as it is live.
+
+### What batch is and is not for
+
+Batch does not make a document faster, it stops you waiting for it. The caller's
+cost stays at two calls — one upload, one create — whether the corpus is 30
+documents or 30,000, and the answers land within the gateway's completion
+window. Run the corpus live when you want the results now; queue it when you
+want the machine back.
+
+---
 
 ## Caching and cost
 
@@ -535,7 +721,7 @@ sources/       where documents come from   folder | rest | patents | literature
     |
 ingest         format readers              pdf xml docx pptx png jpeg txt md html
     |
-pipeline       per document:  text extraction  ->  figure OCR  ->  aggregation agent
+pipeline       per document:  text extraction  ->  figure digitisation  ->  figure OCR  ->  aggregation agent
     |          every model call goes through providers/ and the cache
 runner         scheduler (rate limit, retry, isolation) + job store + event bus
     |

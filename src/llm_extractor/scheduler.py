@@ -121,6 +121,13 @@ class Scheduler:
     cancel_token: CancelToken = field(default_factory=CancelToken)
     retry_on: tuple = (Exception,)
     dont_retry_on: tuple = ()
+    #: Optional ``value -> str`` check on a returned result. A task can complete
+    #: without raising and still not have done its job — an extraction whose
+    #: every provider call was refused returns an empty document rather than an
+    #: exception. Returning a message marks the item failed; returning "" or
+    #: None accepts it. Retries are not re-run for this, because the work did
+    #: finish; it is the outcome that is unusable.
+    verdict: object = None
 
     def cancel(self) -> None:
         self.cancel_token.cancel()
@@ -176,6 +183,13 @@ class Scheduler:
                     self.rate_limiter.acquire()
                 value = func(item)
                 duration = time.monotonic() - started
+                complaint = self.verdict(value) if self.verdict is not None else ""
+                if complaint:
+                    self._emit(Event(type=DOC_FAILED, job_id=job_id, doc_id=item_id,
+                                     message=complaint))
+                    return TaskResult(item_id, "error", result=value,
+                                      error=complaint, attempts=attempt,
+                                      duration=duration)
                 self._emit(Event(type=DOC_COMPLETED, job_id=job_id, doc_id=item_id,
                                  payload={"attempts": attempt,
                                           "duration": round(duration, 3)}))

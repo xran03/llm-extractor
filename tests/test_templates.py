@@ -222,6 +222,15 @@ class TemplateValidationTest(unittest.TestCase):
             {"name": "a", "type": "string", "description": "d", "enum": []})})
         self.assertIn("non-empty list", message)
 
+    def test_grounded_must_be_a_boolean(self):
+        message = self._bad({"fields": self._fields(
+            {"name": "a", "type": "number", "description": "d", "grounded": "no"})})
+        self.assertIn("'grounded' must be true or false", message)
+
+    def test_grounded_marker_is_accepted(self):
+        validate_template_dict({"fields": self._fields(
+            {"name": "a", "type": "number", "description": "d", "grounded": False})})
+
     def test_enum_only_on_string_fields(self):
         message = self._bad({"fields": self._fields(
             {"name": "a", "type": "number", "description": "d", "enum": ["x"]})})

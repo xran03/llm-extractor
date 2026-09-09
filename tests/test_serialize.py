@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_extractor.serialize import (FIGURE_COLUMNS, NO_READING_NOTE, append_records_csv,
-                                     figure_rows, read_csv, record_columns,
-                                     write_figures_csv, write_records_csv)
+from llm_extractor.serialize import (FIGURE_COLUMNS, append_records_csv, figure_rows,
+                                     read_csv, record_columns, write_figures_csv,
+                                     write_records_csv)
 from llm_extractor.templates import BUILTIN_TEMPLATES
 
 from ._fakes import DEFAULT_OCR
@@ -159,18 +159,43 @@ class FiguresCsvTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["value"])
 
-    def test_a_figure_that_yielded_nothing_says_so(self):
-        # Otherwise the row is indistinguishable from a reading whose values
-        # went missing, which is the opposite of what happened.
-        rows = figure_rows([{"image": "blank.png",
-                             "ocr": {"figure_type": "chart", "items": []}}], "d1")
-        self.assertEqual(rows[0]["note"], NO_READING_NOTE)
+    def _with_table(self, table):
+        return [{"image": "fig1.png",
+                 "ocr": {"figure_type": "mixed", "items": [], "tables": [table]}}]
 
-    def test_the_model_s_own_note_is_not_overwritten(self):
-        rows = figure_rows([{"image": "blank.png",
-                             "ocr": {"figure_type": "chart", "items": [],
-                                     "notes": "axis unreadable"}}], "d1")
-        self.assertEqual(rows[0]["note"], "axis unreadable")
+    def test_a_table_printed_beside_a_plot_reaches_the_csv(self):
+        # Papers print a statistics table inside the figure, and those readings
+        # used to stop at the JSON artifact instead of reaching the table.
+        rows = figure_rows(self._with_table(
+            {"title": None, "columns": ["P", "R^2"],
+             "rows": [["0.6329", "0.0105"], ["0.0064", "0.3023"]]}), "d1")
+        self.assertEqual([r["value"] for r in rows], [0.6329, 0.0105, 0.0064, 0.3023])
+        self.assertEqual([r["label"] for r in rows], ["P", "R^2", "P", "R^2"])
+
+    def test_an_unnamed_table_is_still_told_apart_from_the_next(self):
+        figure = [{"image": "fig1.png", "ocr": {"figure_type": "mixed", "items": [], "tables": [
+            {"columns": ["P"], "rows": [["0.0064"]]},
+            {"columns": ["P"], "rows": [["0.0212"]]}]}}]
+        self.assertEqual([r["series"] for r in figure_rows(figure, "d1")],
+                         ["table 1", "table 2"])
+
+    def test_a_labelled_table_keeps_the_row_label(self):
+        rows = figure_rows(self._with_table(
+            {"title": "D30", "columns": ["P", "R^2"],
+             "rows": [["P3296", "0.6329", "0.0105"]]}), "d1")
+        self.assertEqual([r["label"] for r in rows], ["P3296 / P", "P3296 / R^2"])
+        self.assertTrue(all(r["series"] == "D30" for r in rows))
+
+    def test_a_non_numeric_cell_keeps_its_text(self):
+        rows = figure_rows(self._with_table(
+            {"columns": ["group"], "rows": [["not detected"]]}), "d1")
+        self.assertIsNone(rows[0]["value"])
+        self.assertEqual(rows[0]["value_text"], "not detected")
+
+    def test_items_and_tables_are_both_written(self):
+        figure = [{"image": "fig1.png", "ocr": {**DEFAULT_OCR, "tables": [
+            {"columns": ["P"], "rows": [["0.05"]]}]}}]
+        self.assertEqual(len(figure_rows(figure, "d1")), len(DEFAULT_OCR["items"]) + 1)
 
     def test_written_columns_match_the_schema(self):
         write_figures_csv(self.path, figure_rows(self.figures, "d1", "Report"))

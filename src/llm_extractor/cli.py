@@ -25,12 +25,16 @@ from .credstore import (delete_credentials, describe_store, save_credentials,
 from .ingest import describe_formats
 from .providers import ProviderError
 from .settings import DEFAULT_CACHE_DIR, build_settings
-from .sources import SOURCES, available_sources
+from .sources import SOURCES, available_sources, build_source
 from .templates import (BUILTIN_TEMPLATES, STARTER_TEMPLATE, TemplateError,
                         load_template)
 
+#: Diagnostics probe the gateway with a short budget: 'check' exists to report
+#: an unreachable host quickly, not to keep retrying one.
+PROBE_TIMEOUT = 15.0
+
 SUBCOMMANDS = {"run", "sources", "formats", "models", "check", "cache", "audit", "serve",
-               "templates", "login", "logout"}
+               "templates", "login", "logout", "batch"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="max API calls per minute")
     run.add_argument("--ocr", choices=["auto", "always", "never"], default=None,
                      help="figure OCR policy (default: auto)")
+    run.add_argument("--chart", choices=["auto", "always", "never"], default=None,
+                     help="digitise vector figures, one record per plotted point "
+                          "(default: auto, which also skips OCR on pages it measured)")
     run.add_argument("--format", dest="output_format", default=None,
                      choices=["jsonl", "csv", "both"],
                      help="record artifacts to write (default: both)")
@@ -82,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
                             ("check", "verify credentials and configuration")):
         p = sub.add_parser(name, help=help_text)
         _add_common(p)
+        if name == "check":
+            p.add_argument("--no-verify", action="store_true",
+                           help="report the configuration without contacting the gateway")
         if name == "templates":
             p.add_argument("--show", help="print one template with its JSON schema")
             p.add_argument("--init", metavar="PATH",
@@ -109,6 +119,42 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--invalidate-drifted", action="store_true",
                        help="delete entries that failed the audit so they re-extract")
     audit.add_argument("-o", "--output", default="", help="write the audit report JSON here")
+
+    batch = sub.add_parser("batch", help="queue a corpus through the provider's batch API")
+    batch_sub = batch.add_subparsers(dest="batch_cmd", required=True)
+
+    bp = batch_sub.add_parser("preflight", help="check whether this gateway can run batches")
+    _add_common(bp)
+
+    bs = batch_sub.add_parser("submit", help="upload a corpus as one queued batch")
+    _add_common(bs)
+    bs.add_argument("-i", "--input", required=True, help="folder (or file) to extract")
+    bs.add_argument("-o", "--output", default="out", help="where the manifest and results go")
+    bs.add_argument("--extensions", help="comma-separated extension filter")
+    bs.add_argument("--limit", type=int, default=0, help="stop after N documents")
+    bs.add_argument("--figures", action="store_true",
+                    help="queue figure OCR in the same batch")
+    bs.add_argument("--completion-window", default="24h",
+                    help="how long the gateway may take (default 24h)")
+
+    for name, help_text in (("status", "report how far along a batch is"),
+                            ("fetch", "download a finished batch and write artifacts"),
+                            ("cancel", "cancel a running batch")):
+        p = batch_sub.add_parser(name, help=help_text)
+        _add_common(p)
+        p.add_argument("-o", "--output", default="out",
+                       help="directory holding the batch manifest")
+        p.add_argument("--batch-id", default="",
+                       help="batch to act on (default: the one in the manifest)")
+        if name == "fetch":
+            p.add_argument("--wait", action="store_true",
+                           help="poll until the batch finishes, then collect")
+            p.add_argument("--poll-seconds", type=int, default=60,
+                           help="seconds between polls when waiting")
+
+    bl = batch_sub.add_parser("list", help="list recent batches on the gateway")
+    _add_common(bl)
+    bl.add_argument("--limit", type=int, default=20)
 
     serve = sub.add_parser("serve", help="run the HTTP API for a frontend")
     _add_common(serve)
@@ -166,6 +212,7 @@ def settings_from_args(args, allow_prompt: bool = False):
         allow_prompt=allow_prompt,
         template=args.template,
         ocr=getattr(args, "ocr", None),
+        chart=getattr(args, "chart", None),
         output_format=getattr(args, "output_format", None),
         aggregate=False if getattr(args, "no_aggregate", False) else None,
         max_workers=getattr(args, "workers", None),
@@ -339,16 +386,44 @@ def cmd_check(args) -> int:
               file=sys.stderr)
         return 1
 
+    if getattr(args, "no_verify", False):
+        print("\nconnectivity: not checked (--no-verify)")
+        return 0
+
     try:
         from .providers import build_provider
 
         settings.cache_enabled = False
+        # A diagnostic must fail fast: the full retry budget would take minutes
+        # to report an unreachable host, which is the one thing it exists to say.
+        settings.timeout = min(settings.timeout, PROBE_TIMEOUT)
+        settings.max_retries = 1
         models = build_provider(settings).list_models()
         print(f"\nconnectivity: OK ({len(models)} models visible)")
-        return 0
     except Exception as exc:
         print(f"\nconnectivity: FAILED - {exc}", file=sys.stderr)
         return 1
+
+    # Visible is not the same as permitted, and /v1/models is not always
+    # exhaustive: gateways serve aliases and deployments they do not list. So
+    # this is advisory — worth saying, not worth failing a working setup over.
+    configured = {
+        "model": settings.model,
+        "ocr_model": settings.ocr_model,
+        "agent_model": settings.agent_model,
+        "review_model": settings.review_model,
+    }
+    offered = set(models)
+    missing = {role: name for role, name in configured.items()
+               if name and name not in offered}
+    if missing:
+        print("\nmodels not listed by this gateway (it may still serve them):")
+        for role, name in sorted(missing.items()):
+            print(f"  {role:<12} {name}")
+        print("  run 'llm-extract models' to see what it does list")
+    else:
+        print(f"models    : {', '.join(sorted(set(configured.values())))} all listed")
+    return 0
 
 
 def cmd_login(args) -> int:
@@ -522,6 +597,127 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_batch(args) -> int:
+    """Queue work through the provider's batch API.
+
+    Split into submit / status / fetch because a batch outlives the process
+    that starts it: the point is to hand the corpus over and come back, not to
+    hold a terminal open for the completion window.
+    """
+    import time as _time
+
+    from . import batchapi
+    from .providers import build_provider
+
+    settings = settings_from_args(args)
+    settings.cache_enabled = False          # a queued request is never a cache hit
+    provider = build_provider(settings)
+    action = args.batch_cmd
+
+    if action == "preflight":
+        report = batchapi.preflight(provider)
+        print(f"api          : {settings.api} ({provider.INFERENCE_PATH})")
+        print(f"list batches : {report['list_batches']}")
+        print(f"upload files : {report['upload_files'] or 'not reached'}")
+        if report["detail"]:
+            print(f"detail       : {report['detail']}")
+        print(f"\nbatch ready  : {'yes' if report['ready'] else 'no'}")
+        if not report["ready"]:
+            print("the gateway exposes the batch routes but cannot store input files; "
+                  "this is a deployment setting on the gateway, not a client problem",
+                  file=sys.stderr)
+        return 0 if report["ready"] else 1
+
+    if action == "list":
+        for entry in provider.list_batches(limit=args.limit).get("data", []):
+            counts = entry.get("request_counts") or {}
+            print(f"{entry.get('id'):<40} {entry.get('status'):<12} "
+                  f"{counts.get('completed', 0)}/{counts.get('total', 0)}")
+        return 0
+
+    out_dir = Path(args.output)
+    manifest_path = out_dir / batchapi.MANIFEST_NAME
+
+    if action == "submit":
+        template = load_template(settings.template)
+        source_params = {"input_dir": args.input}
+        if args.extensions:
+            source_params["extensions"] = [
+                e if e.startswith(".") else f".{e}"
+                for e in args.extensions.split(",") if e.strip()
+            ]
+        if args.limit:
+            source_params["limit"] = args.limit
+
+        documents = list(build_source("folder", **source_params).iter_documents())
+        if not documents:
+            print(f"error: no readable documents under {args.input}", file=sys.stderr)
+            return 2
+
+        manifest = batchapi.submit(provider, documents, template, settings, out_dir,
+                                   completion_window=args.completion_window,
+                                   with_ocr=args.figures)
+        stages = {}
+        for task in manifest.tasks:
+            stages[task.stage] = stages.get(task.stage, 0) + 1
+        print(f"batch     : {manifest.batch_id}")
+        print(f"documents : {len(manifest.documents())}")
+        print(f"requests  : {len(manifest.tasks)}  ({', '.join(f'{k}={v}' for k, v in sorted(stages.items()))})")
+        print(f"manifest  : {manifest_path}")
+        print(f"\nnext: llm-extract batch fetch -o {args.output} --wait")
+        return 0
+
+    if not manifest_path.exists() and not args.batch_id:
+        print(f"error: no manifest at {manifest_path}; pass --batch-id or submit first",
+              file=sys.stderr)
+        return 2
+    manifest = (batchapi.Manifest.load(manifest_path) if manifest_path.exists()
+                else batchapi.Manifest(batch_id=args.batch_id))
+    batch_id = args.batch_id or manifest.batch_id
+
+    if action == "cancel":
+        entry = provider.cancel_batch(batch_id)
+        print(f"{batch_id}: {entry.get('status')}")
+        return 0
+
+    if action == "status":
+        entry = provider.get_batch(batch_id)
+        counts = entry.get("request_counts") or {}
+        print(f"batch    : {batch_id}")
+        print(f"status   : {entry.get('status')}")
+        print(f"requests : {counts.get('completed', 0)} done, "
+              f"{counts.get('failed', 0)} failed, of {counts.get('total', 0)}")
+        if entry.get("output_file_id"):
+            print(f"output   : {entry['output_file_id']}")
+        return 0
+
+    # fetch
+    if args.wait:
+        while True:
+            entry = provider.get_batch(batch_id)
+            state = entry.get("status")
+            counts = entry.get("request_counts") or {}
+            print(f"  {state}: {counts.get('completed', 0)}/{counts.get('total', 0)}")
+            if state in batchapi.FINISHED:
+                break
+            _time.sleep(max(5, args.poll_seconds))
+
+    template = load_template(manifest.template or settings.template)
+    try:
+        summary = batchapi.collect(provider, manifest, template, settings, out_dir)
+    except ProviderError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"\nstatus    : {summary['status']}")
+    print(f"documents : {summary['documents']}")
+    print(f"records   : {summary['records']}   figures: {summary['figures']}")
+    print(f"output    : {out_dir.resolve()}")
+    for problem in summary["errors"][:5]:
+        print(f"  ! {problem}", file=sys.stderr)
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .service import serve
 
@@ -540,6 +736,7 @@ COMMANDS = {
     "check": cmd_check,
     "cache": cmd_cache,
     "audit": cmd_audit,
+    "batch": cmd_batch,
     "serve": cmd_serve,
     "login": cmd_login,
     "logout": cmd_logout,

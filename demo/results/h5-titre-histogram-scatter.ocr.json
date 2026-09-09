@@ -33,6 +33,7 @@
       ],
       "notes": null
     },
+    "truncated": false,
     "usage": {
       "prompt_tokens": 0,
       "completion_tokens": 0,

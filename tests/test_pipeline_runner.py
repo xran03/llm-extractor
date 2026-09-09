@@ -235,6 +235,37 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(second.ok, 1)
         self.assertEqual(second.skipped, 2)
 
+    def _break_extraction(self):
+        import llm_extractor.runner as runner
+
+        self.provider = FakeProvider(fail_stages=("extract",))
+        runner.build_provider = lambda settings, **kwargs: self.provider
+
+    def test_a_document_whose_extraction_failed_is_not_reported_ok(self):
+        """A provider that refuses every call must not look like a clean run."""
+        self._break_extraction()
+        summary = self._run()
+        self.assertEqual(summary.ok, 0)
+        self.assertEqual(summary.failed, 3)
+        self.assertTrue(summary.errors)
+
+    def test_a_failed_document_is_retried_rather_than_skipped(self):
+        """The resume map is keyed off task status, so a failure must stay out."""
+        self._break_extraction()
+        first = self._run()
+        self.assertEqual(first.failed, 3)
+        self._patch_provider()
+        second = self._run()
+        self.assertEqual(second.skipped, 0)
+        self.assertEqual(second.ok, 3)
+
+    def test_a_run_that_extracted_nothing_is_marked_failed(self):
+        self._break_extraction()
+        summary = self._run()
+        job = self.store.get_job(summary.job_id)
+        self.assertEqual(job.status, "error")
+        self.assertIn("failed", job.error)
+
     def test_unknown_source_fails_the_job_cleanly(self):
         summary = run_job(make_settings(self.dir), source_name="does-not-exist",
                           out_dir=str(self.out), store=self.store)

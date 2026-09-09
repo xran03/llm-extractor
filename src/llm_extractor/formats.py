@@ -103,8 +103,11 @@ BUILTIN = (
     Format("email", (".eml", ".mbox"), EMAIL, "message/rfc822",
            description="RFC-822 email; headers plus the text body."),
     Format("doc", (".doc", ".dot"), DOCUMENT, "application/msword",
-           requires="antiword or libreoffice",
-           description="Legacy Word; needs a local converter."),
+           requires="olefile, or antiword/libreoffice",
+           description="Legacy Word; read directly when olefile is installed."),
+    Format("xls", (".xls", ".xlt"), SPREADSHEET, "application/vnd.ms-excel",
+           requires="xlrd",
+           description="Legacy Excel; every sheet flattened to delimited rows."),
     _image("png", (".png",), "image/png", "PNG image."),
     _image("jpeg", (".jpg", ".jpeg", ".jpe"), "image/jpeg", "JPEG image."),
     _image("gif", (".gif",), "image/gif", "GIF image."),
@@ -141,6 +144,10 @@ SKIP_EXTENSIONS = frozenset((
 # --------------------------------------------------------------------------
 # Detection
 # --------------------------------------------------------------------------
+#: Sentinel for the compound-file magic, resolved to a real format by looking
+#: at the streams the container holds.
+_OLE2 = "\x00ole2"
+
 _MAGIC = (
     (b"%PDF", "pdf"),
     (b"\x89PNG\r\n\x1a\n", "png"),
@@ -151,8 +158,10 @@ _MAGIC = (
     (b"II*\x00", "tiff"),
     (b"MM\x00*", "tiff"),
     (b"{\\rtf", "rtf"),
-    # OLE2 compound file: legacy .doc/.xls/.ppt all share it.
-    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "doc"),
+    # OLE2 compound file: legacy .doc/.xls/.ppt all share it, so the signature
+    # alone cannot pick a reader. _ole_format looks inside for the stream that
+    # says which application wrote it.
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", _OLE2),
 )
 _ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
 HEADER_BYTES = 512
@@ -172,7 +181,7 @@ def sniff(header: bytes, path=None) -> str:
         return ""
     for signature, name in _MAGIC:
         if header.startswith(signature):
-            return name
+            return _ole_format(path) if name is _OLE2 else name
     if header[:4] in _ZIP_MAGIC:
         return _zip_format(path) if path else ""
     if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
@@ -183,6 +192,66 @@ def sniff(header: bytes, path=None) -> str:
     if start.startswith((b"<!doctype html", b"<html")):
         return "html"
     return ""
+
+
+#: Directory sectors read when identifying an OLE2 file. The entries that name
+#: the application's own stream sit at the front in every file seen, and the
+#: bound keeps identification cheap on a large workbook.
+_OLE_DIR_SECTORS = 8
+
+
+def _ole_format(path) -> str:
+    """Disambiguate legacy OLE2 documents by the stream that identifies them.
+
+    Word, Excel and PowerPoint share the compound-file signature, so routing on
+    magic alone sends a spreadsheet to the Word reader and reports it as an
+    unreadable document. The application's own stream name is definitive and
+    costs one seek to read.
+    """
+    if not path:
+        return "doc"
+    names = _ole_stream_names(path)
+    if "WordDocument" in names:
+        return "doc"
+    if "Workbook" in names or "Book" in names:
+        return "xls"
+    # Unknown or unsupported OLE2 (PowerPoint, Visio): the Word reader owns the
+    # clearest "this needs a converter" message, so leave it there.
+    return "doc"
+
+
+def _ole_stream_names(path) -> set:
+    """Stream names from the compound file's directory, stdlib only.
+
+    The header gives the sector size and the first directory sector outright,
+    so the directory can be read directly instead of walking the allocation
+    table - enough to identify the file without a parser dependency.
+    """
+    try:
+        with open(path, "rb") as fh:
+            header = fh.read(512)
+            if len(header) < 512:
+                return set()
+            shift = int.from_bytes(header[0x1E:0x20], "little")
+            sector = 1 << shift if 7 <= shift <= 12 else 512
+            first = int.from_bytes(header[0x30:0x34], "little")
+            if first > 0x7FFFFFF0:
+                return set()
+            fh.seek(512 + first * sector)
+            blob = fh.read(sector * _OLE_DIR_SECTORS)
+    except (OSError, ValueError, OverflowError):
+        return set()
+
+    names = set()
+    for start in range(0, len(blob) - 127, 128):
+        entry = blob[start:start + 128]
+        length = int.from_bytes(entry[0x40:0x42], "little")
+        if not 4 <= length <= 64:
+            continue
+        name = entry[:length - 2].decode("utf-16-le", "ignore").strip("\x00")
+        if name:
+            names.add(name)
+    return names
 
 
 def _zip_format(path) -> str:

@@ -22,6 +22,30 @@ from llm_extractor.formats import (SELF, decode_bytes, detect_format, looks_like
 from ._fakes import (PNG_BYTES, write_csv, write_docx, write_eml, write_json, write_odt,
                      write_png, write_pptx, write_rtf, write_txt, write_xlsx, write_xml)
 
+OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _ole2_bytes(stream_name: str, sector: int = 512) -> bytes:
+    """A compound file just complete enough to be identified.
+
+    Only the fields identification reads are filled in: the sector size, the
+    first directory sector, and one directory entry naming the stream that says
+    which application wrote the file.
+    """
+    header = bytearray(b"\x00" * sector)
+    header[0:8] = OLE2_MAGIC
+    header[0x1E:0x20] = (9).to_bytes(2, "little")      # 1 << 9 == 512
+    header[0x30:0x34] = (0).to_bytes(4, "little")      # directory starts here
+
+    entry = bytearray(b"\x00" * 128)
+    encoded = stream_name.encode("utf-16-le") + b"\x00\x00"
+    entry[0:len(encoded)] = encoded
+    entry[0x40:0x42] = len(encoded).to_bytes(2, "little")
+
+    directory = bytearray(b"\x00" * sector)
+    directory[0:128] = entry
+    return bytes(header) + bytes(directory)
+
 
 class FormatTableTest(unittest.TestCase):
     """Invariants every registered format must satisfy."""
@@ -89,6 +113,38 @@ class DetectionTest(unittest.TestCase):
         mislabelled = self.dir / "report.pdf"
         mislabelled.write_bytes(PNG_BYTES)
         self.assertEqual(detect_format(mislabelled).name, "png")
+
+    def test_legacy_office_containers_are_told_apart(self):
+        """OLE2 magic is shared, so the stream inside has to pick the reader.
+
+        Routing every compound file to the Word reader sent real workbooks to
+        a parser that cannot open them, and reported them as unreadable
+        documents rather than reading them as spreadsheets.
+        """
+        for stream, expected in (("WordDocument", "doc"), ("Workbook", "xls"),
+                                 ("Book", "xls")):
+            with self.subTest(stream=stream):
+                path = self.dir / f"legacy-{stream}"
+                path.write_bytes(_ole2_bytes(stream))
+                self.assertEqual(detect_format(path).name, expected)
+
+    def test_a_doc_carrying_an_embedded_zip_is_not_read_as_docx(self):
+        """``zipfile.is_zipfile`` finds an end-of-central-directory record
+        anywhere in a file, so a .doc holding an OOXML theme fragment answers
+        True. Treating it as a .docx yields a container with no
+        ``word/document.xml`` and therefore empty text - a silent loss that
+        looks like a successful extraction.
+        """
+        import io
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            zf.writestr("theme/theme/theme1.xml", "<a/>")
+        path = self.dir / "hybrid.docx"
+        path.write_bytes(_ole2_bytes("WordDocument") + buffer.getvalue())
+
+        self.assertTrue(zipfile.is_zipfile(path), "precondition: looks like a zip")
+        self.assertEqual(detect_format(path).name, "doc")
 
     def test_extension_less_file_is_still_identified(self):
         path = self.dir / "no_extension"

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ._exec import map_ordered
 from .ingest import mime_for
-from .parsing import extract_json_object
+from .parsing import TRUNCATED_KEY, extract_json_object
 from .providers.base import image_part, user_message
 from .templates import OCR_INSTRUCTIONS, OCR_JSON_SCHEMA, empty_ocr_payload
 
@@ -29,6 +29,7 @@ class OCRResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_calls: int = 0
+    truncated: int = 0
     errors: list = field(default_factory=list)
 
     def usage(self) -> dict:
@@ -37,6 +38,7 @@ class OCRResult:
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "cached_calls": self.cached_calls,
+            "truncated": self.truncated,
         }
 
 
@@ -61,10 +63,19 @@ def ocr_figure(provider, image_path, model: str, doc_id: str = "",
         meta={"stage": "ocr", "doc_id": doc_id},
     )
     payload = extract_json_object(completion.text) or empty_ocr_payload()
+    truncated = bool(payload.pop(TRUNCATED_KEY, False))
+    normalized = _normalize_payload(payload)
+    if truncated:
+        # The reply hit the output-token limit. Whatever was emitted before the
+        # cut is real and is kept; the figure must not be reported as complete.
+        note = (f"truncated at the output-token limit after "
+                f"{len(normalized['items'])} items; the figure holds more")
+        normalized["notes"] = f"{normalized['notes']}; {note}" if normalized["notes"] else note
     return {
         "image": path.name,
         "path": str(path),
-        "ocr": _normalize_payload(payload),
+        "ocr": normalized,
+        "truncated": truncated,
         "usage": completion.usage.to_dict(),
     }
 
@@ -94,6 +105,7 @@ def ocr_document(provider, document, model: str, max_workers: int = 4,
         result.prompt_tokens += int(usage.get("prompt_tokens") or 0)
         result.completion_tokens += int(usage.get("completion_tokens") or 0)
         result.cached_calls += 1 if usage.get("cached") else 0
+        result.truncated += 1 if outcome.get("truncated") else 0
         result.figures.append(outcome)
     return result
 
@@ -127,9 +139,13 @@ def ocr_to_text(figures: list) -> str:
             parts = [str(item.get("label") or "")]
             if item.get("series"):
                 parts.append(f"({item['series']})")
-            parts.append(f"= {value}")
-            if item.get("unit"):
-                parts.append(str(item["unit"]))
+            # A legend entry names a series and carries no reading. Writing
+            # "= None" would hand the prompt, and the grounding check, a value
+            # the figure never showed — and real charts label every series.
+            if value is not None:
+                parts.append(f"= {value}")
+                if item.get("unit"):
+                    parts.append(str(item["unit"]))
             if item.get("note"):
                 parts.append(f"- {item['note']}")
             lines.append(" ".join(p for p in parts if p))
@@ -151,6 +167,7 @@ def ocr_summary(figures: list) -> dict:
         "figures": len(figures),
         "items": sum(len((f.get("ocr") or {}).get("items") or []) for f in figures),
         "tables": sum(len((f.get("ocr") or {}).get("tables") or []) for f in figures),
+        "truncated": sum(1 for f in figures if f.get("truncated")),
         "numeric_items": sum(
             1 for f in figures
             for item in (f.get("ocr") or {}).get("items") or []

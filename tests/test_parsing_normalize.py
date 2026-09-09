@@ -4,8 +4,9 @@ from __future__ import annotations
 import unittest
 
 from llm_extractor.normalize import (annotate_grounding, canon_category, coerce_record,
-                                     fix_units, parse_number, span_is_grounded,
-                                     token_set_similarity, value_supported_by_span)
+                                     fix_units, number_unit_pairs, numbers_in_text,
+                                     parse_number, span_is_grounded, token_set_similarity,
+                                     value_supported_by_span)
 from llm_extractor.parsing import extract_json_array, extract_json_object, strip_fences
 from llm_extractor.templates import BUILTIN_TEMPLATES
 
@@ -132,6 +133,53 @@ class GroundingTest(unittest.TestCase):
 
     def test_thousands_separators_are_handled(self):
         self.assertTrue(value_supported_by_span(1165.0, "titer of 1,165"))
+
+    def test_comma_separated_list_is_read_as_separate_numbers(self):
+        """A compact list must not be merged into one oversized number.
+
+        Time series and tabulated readings are often written without spaces
+        after the comma, and every entry in such a list is a value a record may
+        legitimately cite as its evidence.
+        """
+        self.assertEqual(numbers_in_text("5,094,5,227,5,296,5,325"),
+                         [5094.0, 5227.0, 5296.0, 5325.0])
+
+    def test_value_quoted_from_a_comma_separated_list_is_grounded(self):
+        span = "Taw = 1,365, 4,484, 3,386, 4,088"
+        for value in (1365.0, 4484.0, 3386.0, 4088.0):
+            self.assertTrue(value_supported_by_span(value, span))
+        self.assertFalse(value_supported_by_span(1365448433864088.0, span))
+
+    def test_thousands_groups_must_be_three_digits(self):
+        self.assertEqual(numbers_in_text("1, 2, and 5 seconds"), [1.0, 2.0, 5.0])
+        self.assertEqual(numbers_in_text("1,234.56"), [1234.56])
+        self.assertEqual(numbers_in_text("-1,234"), [-1234.0])
+        self.assertEqual(numbers_in_text("2.05e3"), [2050.0])
+
+    def test_hyphenated_range_is_two_positive_numbers(self):
+        """The hyphen in a written range is a separator, not a minus sign.
+
+        Ranges and confidence intervals are routinely typed with a plain
+        hyphen, so reading it as a sign turns the upper bound negative and the
+        bound is then absent from the very span that states it.
+        """
+        self.assertEqual(numbers_in_text("10-15%"), [10.0, 15.0])
+        self.assertEqual(numbers_in_text("95% CI 1.2-3.4"), [95.0, 1.2, 3.4])
+        self.assertEqual(numbers_in_text("1.2\u20133.4"), [1.2, 3.4])
+
+    def test_a_genuine_minus_sign_still_parses(self):
+        self.assertEqual(numbers_in_text("a drop of -15%"), [-15.0])
+        self.assertEqual(numbers_in_text("(-15)"), [-15.0])
+        self.assertEqual(numbers_in_text("-0.5 to -0.1"), [-0.5, -0.1])
+        self.assertEqual(numbers_in_text("2.05e-3"), [0.00205])
+
+    def test_range_bounds_are_grounded_by_the_span_that_states_them(self):
+        span = "lots were targeted to a degree of activation of 10-15%"
+        self.assertTrue(value_supported_by_span(10.0, span))
+        self.assertTrue(value_supported_by_span(15.0, span))
+
+    def test_units_are_paired_with_numbers_in_a_list(self):
+        self.assertEqual(number_unit_pairs("doses of 1,000 mg"), [(1000.0, "mg")])
 
     def test_annotate_flags_a_real_record(self):
         record = {"value": 12.5, "source_span": "Group A reached 12.5 ug/mL"}

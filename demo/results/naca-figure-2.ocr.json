@@ -68,6 +68,7 @@
       ],
       "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
     },
+    "truncated": false,
     "usage": {
       "prompt_tokens": 0,
       "completion_tokens": 0,

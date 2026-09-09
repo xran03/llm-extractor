@@ -25,6 +25,34 @@ ENV_PREFIX = {
     "aimodelhub": "AI_MODEL_HUB",
 }
 
+# Per-backend model defaults. A gateway only serves the models it hosts, so the
+# right default depends on which one is being called: picking a name the
+# backend has never heard of turns a first run into a 404 hunt.
+#
+# ``review`` is the model used to judge extracted records rather than produce
+# them. A different model family is deliberate — a second opinion from the same
+# model that wrote the answer mostly restates it.
+BACKEND_DEFAULTS = {
+    "aimodelhub": {
+        "model": "gpt-5.6-sol",
+        "ocr_model": "gpt-5.6-sol",
+        "agent_model": "gpt-5.6-sol",
+        "review_model": "claude-fable-5",
+    },
+    "llmhub": {
+        "model": DEFAULT_MODEL,
+        "ocr_model": DEFAULT_OCR_MODEL,
+        "agent_model": DEFAULT_AGENT_MODEL,
+        "review_model": DEFAULT_AGENT_MODEL,
+    },
+}
+
+
+def backend_default(api: str, role: str, fallback: str = "") -> str:
+    """The default model for one role on one backend."""
+    defaults = BACKEND_DEFAULTS.get(api) or {}
+    return defaults.get(role) or fallback
+
 
 @dataclass
 class Settings:
@@ -50,8 +78,13 @@ class Settings:
 
     template: str = "generic"
     ocr: str = "auto"          # auto | always | never
+    chart: str = "auto"        # auto | always | never — vector figure digitisation
+    chart_model: str = ""      # model that names panels/groups; defaults to model
+    review_model: str = ""     # model that judges records; a second opinion
     aggregate: bool = True     # run the aggregation agent over text + OCR JSON
     max_figures: int = 20
+    max_chart_pages: int = 20
+    max_chart_points: int = 20000
     output_format: str = "both"  # jsonl | csv | both
 
     extra: dict = field(default_factory=dict)
@@ -74,6 +107,7 @@ class Settings:
             "model": self.model,
             "ocr_model": self.ocr_model,
             "agent_model": self.agent_model,
+            "review_model": self.review_model,
             "template": self.template,
             "cache": self.cache_dir if self.cache_enabled else "(disabled)",
         }
@@ -107,11 +141,20 @@ def build_settings(api: str | None = None, *, base_url: str | None = None,
         fallback=None if has_oauth else (lambda: stored_api_key(api)),
     )
 
-    settings.model = model or get_env("LLM_EXTRACTOR_MODEL") or DEFAULT_MODEL
-    settings.ocr_model = ocr_model or get_env("LLM_EXTRACTOR_OCR_MODEL") or settings.model
-    settings.agent_model = (
-        agent_model or get_env("LLM_EXTRACTOR_AGENT_MODEL") or settings.model
-    )
+    # A model chosen explicitly drives the derived roles too: someone passing
+    # --model expects the whole run to use it, not for OCR to silently fall
+    # back to the backend's default. The per-backend defaults apply only when
+    # nothing was chosen at all.
+    chosen = model or get_env("LLM_EXTRACTOR_MODEL")
+    settings.model = chosen or backend_default(api, "model", DEFAULT_MODEL)
+    settings.ocr_model = (ocr_model or get_env("LLM_EXTRACTOR_OCR_MODEL")
+                          or chosen or backend_default(api, "ocr_model", settings.model))
+    settings.agent_model = (agent_model or get_env("LLM_EXTRACTOR_AGENT_MODEL")
+                            or chosen
+                            or backend_default(api, "agent_model", settings.model))
+    settings.review_model = (get_env("LLM_EXTRACTOR_REVIEW_MODEL")
+                             or backend_default(api, "review_model", settings.agent_model))
+    settings.chart_model = get_env("LLM_EXTRACTOR_CHART_MODEL") or settings.model
 
     settings.cache_dir = str(
         Path(cache_dir or get_env("LLM_EXTRACTOR_CACHE_DIR") or DEFAULT_CACHE_DIR)

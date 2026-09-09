@@ -54,6 +54,7 @@
       ],
       "notes": "Each group plots 34 individual subjects. Only the printed group means are reported: the individual points carry no labels, and a vision model cannot enumerate them reliably."
     },
+    "truncated": false,
     "usage": {
       "prompt_tokens": 0,
       "completion_tokens": 0,

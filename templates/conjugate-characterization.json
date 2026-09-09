@@ -1,0 +1,247 @@
+{
+  "name": "conjugate_characterization",
+  "description": "Physicochemical characterization of glycoconjugate vaccine lots - polysaccharide size, degree of activation, saccharide/protein ratios, free saccharide and O-acetylation - keyed so it can be joined to titer records by study_batch and serotype.",
+  "system_prompt": "You are a meticulous document data-extraction agent working on glycoconjugate vaccine chemistry. You extract ONLY facts explicitly stated in the provided material. You never guess, never infer unstated values, and you always quote your evidence verbatim. If a field is unknown, use null - null is always better than a plausible guess. Characterization numbers look interchangeable but are not: a ratio that was charged into a reaction and a ratio that was measured in the product are different facts, and so are a specification and a measurement.",
+  "instructions": "Extract every explicitly reported PHYSICOCHEMICAL CHARACTERIZATION value for a polysaccharide, an activated intermediate or a conjugate, and emit ONE JSON array.\n\nONE RECORD = one property, for one sample, at one process stage, by one method.\n\nA characterization table with 13 serotypes down the rows and 4 properties across the columns yields 52 records, not 4 and not 13. Never pack several properties into one record, and never merge two serotypes because they share a row of text.\n\nRules that matter most:\n(A) sample_stage IS NOT OPTIONAL CONTEXT - IT CHANGES WHAT THE NUMBER MEANS. Molecular weight is normally reported for the native or the sized polysaccharide, degree of activation for the activated intermediate, and free saccharide for the finished conjugate. The same property measured at two stages gives two records, never one. When the text genuinely does not say, use 'na' rather than assuming the stage that seems likely.\n(B) NEVER CONFLATE THE INPUT RATIO WITH THE PRODUCT RATIO. 'saccharide_protein_input_ratio' is what was CHARGED into the conjugation reaction ('conjugation was performed at a 1:1 saccharide-to-protein ratio', 'polysaccharide was added at 2 mg per mg of CRM197'). 'saccharide_protein_ratio' is what was MEASURED in the resulting conjugate ('the final conjugate had an S/P ratio of 0.8', 'saccharide-to-protein ratio of the purified conjugate'). They are routinely different numbers in the same paper and mixing them silently corrupts every downstream comparison. If the sentence does not make clear which one it is, record it as 'other' and say so in notes rather than choosing.\n(C) A SPECIFICATION IS NOT A MEASUREMENT. 'free saccharide must be <=20%' or 'lots were targeted to a degree of activation of 10-15%' is an acceptance criterion or a target: value_kind = 'target_spec'. Only a number the study actually obtained is value_kind = 'measured'. Treating a release specification as a result invents data that was never reported.\n(D) value_basis IS WHAT MAKES DEGREES AND RATIOS COMPARABLE. A degree of activation of '0.8' means nothing until it is known whether that is moles per mole of repeat unit, a percentage of repeat units, or a weight ratio; the same is true of O-acetylation. Record the basis whenever the paper states it, in words or in the unit, and use 'na' when it does not. Do not infer a basis from what is customary.\n(E) NON-NUMERIC VALUES ARE STILL DATA. A repeat unit written as a structure ('->4)-beta-D-Glcp-(1->3)-beta-D-GalpNAc-(1->') or a composition given as a molar ratio ('Glc:GalNAc:Rha = 1:1:1') goes in value_text with value = null. Copy the string exactly, including arrows, anomeric descriptors and linkage numbers - a structure retyped loosely is worthless.\n(F) NEVER LINEARIZE A BRANCHED REPEAT UNIT. Published repeat units are typeset in TWO DIMENSIONS: a backbone line, with each branch printed beneath it and joined by a vertical arrow, so that WHICH backbone residue carries the branch is expressed only by horizontal character alignment. Every text extraction destroys that alignment - the attachment digits, the arrows and the branch residues arrive as separate lines with their spacing collapsed to single spaces, and 'up arrow' is often mis-decoded as the digit 1. Copy what is printed into value_text exactly as it arrives, line breaks and all, and set structure_fidelity = 'branched_2d_layout'. Do NOT fold the branches into the backbone with brackets, and do NOT choose an attachment position. The information required to do that is not in the text you were given, so any linear string you produced would be invented - and unlike a wrong number, a wrong attachment cannot be caught by checking it against the quote, because the quote never contained it. Only when the running text states the attachment in words, or already prints it inline in brackets, may you record a linear form, with structure_fidelity = 'branched_attachment_stated'.\n(G) NEGATIVE AND BOUNDED RESULTS ARE DATA AND MUST BE EXTRACTED. 'free saccharide was below the limit of quantitation', 'no O-acetylation was detected', 'de-O-acetylated' -> record the property with the stated limit as value when a limit is given, censoring = 'left_censored', and the wording in notes. A property that was simply never measured is not a record at all - do not invent one to say so.\n(H) A RANGE IS NOT A MEAN. '10-15%' or '1.2 to 1.8' gives value = null, value_low = 10, value_high = 15, value_kind = 'range'. Only put a number in value when the text reports a single figure. A mean over several lots is value_kind = 'mean' with n_lots set.\n(I) study_batch, serotype, lot_id AND vaccine_name ARE JOIN KEYS. Copy them exactly as the paper writes them and spell them the same way in every record, because these records are matched to immunogenicity records on those strings. A serotype written '6B' in one record and 'serotype 6B' in another will not join.\n(J) Report the number exactly as printed, with the unit as printed. Never convert kDa to Da, never turn a ratio into a percentage, never normalise a basis.\n(K) property_as_written must preserve the paper's own term ('degree of oxidation', 'Kd', '% free sugar', 'molar ratio of O-acetyl per repeat unit'), even when it maps cleanly onto the controlled property vocabulary. The mapping is for grouping; the original wording is what a reader checks against.",
+  "key_fields": [
+    "serotype",
+    "property",
+    "sample_stage",
+    "lot_id"
+  ],
+  "fields": [
+    {
+      "name": "pathogen",
+      "type": "string",
+      "description": "Organism the vaccine targets.",
+      "enum": [
+        "pneumococcus",
+        "e_coli",
+        "gbs",
+        "meningococcus",
+        "hib",
+        "salmonella",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "serotype",
+      "type": "string",
+      "description": "Serotype/serogroup exactly as written, e.g. '6B', '19A', 'III', 'O25b'. Null if the value is not serotype-specific."
+    },
+    {
+      "name": "study_batch",
+      "type": "string",
+      "description": "Study, trial or experiment label as written. Must match the label used for the same experiment elsewhere, since records are clustered on it."
+    },
+    {
+      "name": "lot_id",
+      "type": "string",
+      "description": "Lot, batch or conjugate identifier as written, e.g. 'lot 3', 'conjugate A', 'PnPS19F-CRM-02'. Finer than study_batch, and null when the paper names no lot."
+    },
+    {
+      "name": "vaccine_name",
+      "type": "string",
+      "description": "Vaccine product or candidate name as written, e.g. 'PCV13', 'V114', 'MAPS'."
+    },
+    {
+      "name": "carrier",
+      "type": "string",
+      "description": "Carrier protein as written.",
+      "enum": [
+        "crm197",
+        "tt",
+        "dt",
+        "scp",
+        "protein_d",
+        "omp",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "conjugation_chemistry",
+      "type": "string",
+      "description": "Chemistry used to couple saccharide to carrier.",
+      "enum": [
+        "reductive_amination",
+        "cdap",
+        "cdi",
+        "edac",
+        "click",
+        "rac_dmso",
+        "tempo_oxidation",
+        "thioether",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "sample_stage",
+      "type": "string",
+      "description": "What was actually measured. 'native_polysaccharide' = purified polysaccharide before any sizing; 'sized_polysaccharide' = after deliberate size reduction; 'activated_polysaccharide' = after activation/oxidation but before coupling; 'conjugate_bulk' = purified conjugate; 'final_product' = formulated multivalent vaccine.",
+      "enum": [
+        "native_polysaccharide",
+        "sized_polysaccharide",
+        "activated_polysaccharide",
+        "conjugate_bulk",
+        "final_product",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "property",
+      "type": "string",
+      "description": "The characterization property, mapped onto a controlled vocabulary. 'degree_of_activation' = fraction of the saccharide bearing a reactive group after activation/oxidation; 'saccharide_protein_input_ratio' = the ratio CHARGED into the reaction; 'saccharide_protein_ratio' = the ratio MEASURED in the product; 'degree_of_conjugation' = carrier sites (e.g. lysines) modified; 'molecular_size_kd' = distribution coefficient on gel filtration. Use 'other' with property_as_written filled when nothing fits.",
+      "enum": [
+        "polysaccharide_mw",
+        "conjugate_mw",
+        "degree_of_polymerization",
+        "molecular_size_kd",
+        "hydrodynamic_radius",
+        "polydispersity",
+        "degree_of_activation",
+        "saccharide_protein_input_ratio",
+        "saccharide_protein_ratio",
+        "degree_of_conjugation",
+        "conjugation_yield",
+        "free_saccharide_pct",
+        "free_protein_pct",
+        "o_acetylation",
+        "repeat_unit_structure",
+        "monosaccharide_composition",
+        "saccharide_concentration",
+        "protein_concentration",
+        "other",
+        "na"
+      ]
+    },
+    {
+      "name": "property_as_written",
+      "type": "string",
+      "description": "The paper's own term for the property, verbatim, e.g. 'degree of oxidation', 'Kd', '% free saccharide', 'O-acetyl per repeat unit'."
+    },
+    {
+      "name": "value",
+      "type": "number",
+      "description": "The reported number, exactly as printed. Null for a range (use value_low/value_high) and for a non-numeric value (use value_text)."
+    },
+    {
+      "name": "value_text",
+      "type": "string",
+      "description": "Verbatim value when it is not a number, e.g. a repeat unit structure or a molar composition. Copy the string exactly."
+    },
+    {
+      "name": "structure_fidelity",
+      "type": "string",
+      "description": "For structure and composition records only: how completely the printed form determines the molecule. 'branched_2d_layout' means the source drew branches in a two-dimensional layout whose attachment points are carried by horizontal alignment alone, so the flattened text cannot say which backbone residue carries which branch - a linear rendering would be a guess and must not be produced. 'branched_attachment_stated' means the text itself gives the attachment, in words or inline brackets. 'backbone_only' means the branches were not recoverable at all.",
+      "enum": [
+        "linear_complete",
+        "branched_attachment_stated",
+        "branched_2d_layout",
+        "backbone_only",
+        "na"
+      ]
+    },
+    {
+      "name": "value_unit",
+      "type": "string",
+      "description": "Unit exactly as written, e.g. 'kDa', '%', 'mol/mol', 'w/w', 'ug/mL', 'nm'. A unit, never a sentence. Null if none is printed."
+    },
+    {
+      "name": "value_basis",
+      "type": "string",
+      "description": "What the number is expressed relative to, which is what makes degrees and ratios comparable between papers. Only set it when the paper says so.",
+      "enum": [
+        "per_repeat_unit",
+        "per_mole_saccharide",
+        "per_mole_protein",
+        "percent_of_repeat_units",
+        "percent_of_total_saccharide",
+        "weight_by_weight",
+        "mole_by_mole",
+        "absolute",
+        "na"
+      ]
+    },
+    {
+      "name": "value_kind",
+      "type": "string",
+      "description": "What kind of figure the number is. 'target_spec' is a specification or target the study aimed at, never a result it obtained; 'nominal_input' is a quantity charged by design rather than assayed.",
+      "enum": [
+        "measured",
+        "mean",
+        "median",
+        "range",
+        "target_spec",
+        "nominal_input",
+        "na"
+      ]
+    },
+    {
+      "name": "value_low",
+      "type": "number",
+      "description": "Lower end of a reported range or confidence bound, else null."
+    },
+    {
+      "name": "value_high",
+      "type": "number",
+      "description": "Upper end of a reported range or confidence bound, else null."
+    },
+    {
+      "name": "censoring",
+      "type": "string",
+      "description": "Whether the value is a detection/quantitation bound rather than a measurement, e.g. free saccharide reported only as '<5%'.",
+      "enum": [
+        "observed",
+        "left_censored",
+        "right_censored",
+        "na"
+      ]
+    },
+    {
+      "name": "n_lots",
+      "type": "integer",
+      "description": "Number of lots or preparations the value summarises, else null.",
+      "grounded": false
+    },
+    {
+      "name": "method",
+      "type": "string",
+      "description": "Analytical method as written, e.g. 'SEC-MALS', 'HPSEC', '1H NMR', 'HPAEC-PAD', 'anthrone', 'Hestrin', 'BCA'. Null if not stated."
+    },
+    {
+      "name": "condition",
+      "type": "string",
+      "description": "Condition or timepoint scoping the value, e.g. 'after 24 months at 5 C', 'post-lyophilisation', 't=0'. Free saccharide in particular is often reported over stability."
+    },
+    {
+      "name": "value_source",
+      "type": "string",
+      "description": "Where the number physically came from.",
+      "enum": [
+        "text",
+        "table",
+        "figure",
+        "na"
+      ]
+    },
+    {
+      "name": "figure",
+      "type": "string",
+      "description": "Figure or table label the value was read from, e.g. 'Table 1', 'Figure 3B'."
+    },
+    {
+      "name": "notes",
+      "type": "string",
+      "description": "Anything needed to interpret the record, including why a property could not be classified."
+    },
+    {
+      "name": "source_span",
+      "type": "string",
+      "description": "REQUIRED verbatim quote (<=200 chars) from the document supporting this record."
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass, field
 
 
@@ -72,6 +73,13 @@ def user_message(*parts) -> dict:
 class HTTPProvider:
     """Shared HTTP transport: retries, backoff, and auth-refresh on 401/403."""
 
+    #: Endpoint this backend sends inference to, and the batch endpoint it
+    #: names for queued requests. Subclasses override.
+    INFERENCE_PATH = "/v1/chat/completions"
+    #: OpenAI batch protocol paths. Uniform across gateways that implement it.
+    BATCHES_PATH = "/v1/batches"
+    FILES_PATH = "/v1/files"
+
     name: str = "provider"
     base_url: str = ""
     api_key: str = ""
@@ -99,13 +107,18 @@ class HTTPProvider:
             return f"Bearer {self.token_provider.get_token(force=force_refresh)}"
         return f"Bearer {self.api_key}"
 
-    def request(self, method: str, path: str, payload: dict | None = None) -> dict:
+    def request_raw(self, method: str, path: str, data: bytes | None = None,
+                    content_type: str = "", accept: str = "application/json") -> bytes:
+        """Send one request, retrying transient failures, and return raw bytes.
+
+        Every call in this package goes through here, so retries, backoff and
+        OAuth refresh are defined once regardless of body type — JSON for
+        inference, multipart for a batch upload, JSONL for a result download.
+        """
         url = f"{self.base_url}{path}"
-        data = None
-        base_headers: dict = {"Accept": "application/json"}
-        if payload is not None:
-            base_headers["Content-Type"] = "application/json"
-            data = json.dumps(payload).encode("utf-8")
+        base_headers: dict = {"Accept": accept}
+        if content_type:
+            base_headers["Content-Type"] = content_type
 
         last_err: Exception | None = None
         forced_refresh = False
@@ -115,7 +128,7 @@ class HTTPProvider:
                 headers["Authorization"] = self._auth_header()
                 req = urllib.request.Request(url, data=data, headers=headers, method=method)
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                    return json.loads(resp.read().decode("utf-8"))
+                    return resp.read()
             except urllib.error.HTTPError as exc:
                 body = exc.read().decode("utf-8", "replace")
                 if exc.code in (401, 403) and self.token_provider is not None and not forced_refresh:
@@ -130,16 +143,89 @@ class HTTPProvider:
             time.sleep(self.backoff_base ** attempt)
         raise last_err or ProviderError(f"{self.name}: request to {path} failed")
 
+    def request(self, method: str, path: str, payload: dict | None = None) -> dict:
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        raw = self.request_raw(method, path, data,
+                               content_type="application/json" if data else "")
+        return json.loads(raw.decode("utf-8"))
+
     # -------------------------------- API ---------------------------------
     def list_models(self) -> list:
         return [m.get("id") for m in self.request("GET", "/v1/models").get("data", [])]
 
-    def complete(self, messages, model, temperature=0.0, max_tokens=None,
-                 json_schema=None, **kwargs) -> Completion:  # pragma: no cover - abstract
+    def build_payload(self, messages, model, temperature=0.0, max_tokens=None,
+                      json_schema=None, **kwargs) -> dict:  # pragma: no cover - abstract
+        """Render a call into this backend's wire format."""
         raise NotImplementedError
+
+    def parse_completion(self, raw: dict) -> Completion:  # pragma: no cover - abstract
+        """Read this backend's response shape back into a :class:`Completion`."""
+        raise NotImplementedError
+
+    def complete(self, messages, model, temperature=0.0, max_tokens=None,
+                 json_schema=None, **kwargs) -> Completion:
+        payload = self.build_payload(messages, model, temperature=temperature,
+                                     max_tokens=max_tokens, json_schema=json_schema,
+                                     **kwargs)
+        return self.parse_completion(self.request("POST", self.INFERENCE_PATH, payload))
 
     def complete_text(self, messages, model, **kwargs) -> str:
         return self.complete(messages, model, **kwargs).text
+
+    # ------------------------------- batch --------------------------------
+    # The OpenAI batch protocol: upload a JSONL of requests, create a batch over
+    # it, poll, then download a JSONL of responses. The wire format of each line
+    # is whatever ``build_payload`` produces, so a batched call and a live call
+    # can never drift apart.
+
+    def upload_file(self, content: bytes, filename: str = "batch.jsonl",
+                    purpose: str = "batch") -> dict:
+        body, content_type = encode_multipart(
+            {"purpose": purpose}, "file", filename, content, "application/jsonl")
+        raw = self.request_raw("POST", f"{self.FILES_PATH}", body, content_type=content_type)
+        return json.loads(raw.decode("utf-8"))
+
+    def create_batch(self, input_file_id: str, endpoint: str = "",
+                     completion_window: str = "24h", metadata: dict | None = None) -> dict:
+        payload = {
+            "input_file_id": input_file_id,
+            "endpoint": endpoint or self.INFERENCE_PATH,
+            "completion_window": completion_window,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+        return self.request("POST", self.BATCHES_PATH, payload)
+
+    def get_batch(self, batch_id: str) -> dict:
+        return self.request("GET", f"{self.BATCHES_PATH}/{batch_id}")
+
+    def list_batches(self, limit: int = 20, after: str = "") -> dict:
+        query = f"?limit={int(limit)}" + (f"&after={after}" if after else "")
+        return self.request("GET", f"{self.BATCHES_PATH}{query}")
+
+    def cancel_batch(self, batch_id: str) -> dict:
+        return self.request("POST", f"{self.BATCHES_PATH}/{batch_id}/cancel")
+
+    def download_file(self, file_id: str) -> bytes:
+        return self.request_raw("GET", f"{self.FILES_PATH}/{file_id}/content",
+                                accept="application/json")
+
+
+def encode_multipart(fields: dict, file_field: str, filename: str,
+                     content: bytes, file_type: str = "application/octet-stream"):
+    """Build a multipart/form-data body; returns ``(bytes, content_type)``."""
+    boundary = f"----llmextractor{uuid.uuid4().hex}"
+    buf = bytearray()
+    for name, value in fields.items():
+        buf += f"--{boundary}\r\n".encode()
+        buf += f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode()
+    buf += f"--{boundary}\r\n".encode()
+    buf += (f'Content-Disposition: form-data; name="{file_field}"; '
+            f'filename="{filename}"\r\n').encode()
+    buf += f"Content-Type: {file_type}\r\n\r\n".encode()
+    buf += content
+    buf += f"\r\n--{boundary}--\r\n".encode()
+    return bytes(buf), f"multipart/form-data; boundary={boundary}"
 
 
 def usage_from(payload: dict) -> Usage:
