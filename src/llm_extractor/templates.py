@@ -286,7 +286,7 @@ IMMUNOGENICITY = ExtractionTemplate(
         "(D) DESIGN COVARIATES - one atomic fact per field. Never pack serotype, "
         "carrier, chemistry, valency or dose into group_label."
     ),
-    key_fields=["assay", "endpoint", "factor_type", "dose_ug"],
+    key_fields=["assay", "endpoint", "factor_type", "dose_ug", "serotype"],
     fields=[
         Field("assay", "string", "Assay type.", ["opa", "igg", "na"]),
         Field("endpoint", "string", "Endpoint, e.g. 'GMT', 'GMC', 'Concentration'."),

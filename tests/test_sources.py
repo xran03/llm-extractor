@@ -1,15 +1,21 @@
 """Source connectors: local folders and the REST base used by patent/literature APIs."""
 from __future__ import annotations
 
+import argparse
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from llm_extractor.cli import source_from_args
+
 from llm_extractor.sources import SOURCES, available_sources, build_source
-from llm_extractor.sources.base import Source, SourceDocument
+from llm_extractor.sources.base import (Source, SourceConfigError, SourceDocument,
+                                        load_source_config)
 from llm_extractor.sources.literature import EuropePMCSource, OpenAlexSource
 from llm_extractor.sources.patents import PatentSearchSource
-from llm_extractor.sources.rest import RestSource, RestSourceError, dig
+from llm_extractor.sources.rest import (STARTER_CONNECTOR, RestSource,
+                                        RestSourceError, dig)
 
 from ._fakes import write_docx, write_png, write_txt, write_xml
 
@@ -284,6 +290,87 @@ class SourceDocumentTest(unittest.TestCase):
         data = SourceDocument(doc_id="1", text="x", metadata={"a": 1}).to_dict()
         self.assertTrue(data["has_text"])
         self.assertFalse(data["has_blob"])
+
+
+class SourceConfigTest(unittest.TestCase):
+    """A connector defined in a file, so it can be shared instead of retyped."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _write(self, text: str) -> Path:
+        path = Path(self.tmp.name) / "connector.json"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_reads_a_connector_definition(self):
+        config = load_source_config(self._write('{"source":"rest","base_url":"https://x"}'))
+        self.assertEqual(config["base_url"], "https://x")
+
+    def test_missing_file_is_reported(self):
+        with self.assertRaises(SourceConfigError):
+            load_source_config(Path(self.tmp.name) / "absent.json")
+
+    def test_invalid_json_is_reported(self):
+        with self.assertRaises(SourceConfigError):
+            load_source_config(self._write("{not json"))
+
+    def test_a_non_object_is_rejected(self):
+        with self.assertRaises(SourceConfigError):
+            load_source_config(self._write('["rest"]'))
+
+    def test_the_starter_connector_builds_a_working_source(self):
+        config = dict(STARTER_CONNECTOR)
+        source = build_source(config.pop("source"), **config)
+        self.assertEqual(source.base_url, "https://api.crossref.org")
+        self.assertEqual(source.size_param, "rows")
+
+
+class SourceFromArgsTest(unittest.TestCase):
+    """``run`` and ``batch submit`` must resolve a source identically."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _args(self, **overrides):
+        base = {"source": None, "param": [], "source_config": "", "input": "",
+                "extensions": "", "exclude": [], "limit": 0}
+        return argparse.Namespace(**{**base, **overrides})
+
+    def _config(self, payload: dict) -> str:
+        path = Path(self.tmp.name) / "connector.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return str(path)
+
+    def test_defaults_to_the_folder_source(self):
+        name, params = source_from_args(self._args(input="docs"))
+        self.assertEqual(name, "folder")
+        self.assertEqual(params["input_dir"], "docs")
+
+    def test_a_config_supplies_both_the_connector_and_its_settings(self):
+        path = self._config({"source": "rest", "base_url": "https://x", "page_size": 7})
+        name, params = source_from_args(self._args(source_config=path))
+        self.assertEqual(name, "rest")
+        self.assertEqual(params["page_size"], 7)
+        self.assertNotIn("source", params)
+
+    def test_param_overrides_the_config(self):
+        path = self._config({"source": "rest", "base_url": "https://x", "page_size": 7})
+        _, params = source_from_args(self._args(source_config=path, param=["page_size=50"]))
+        self.assertEqual(params["page_size"], 50)
+
+    def test_an_explicit_source_wins_over_the_config(self):
+        path = self._config({"source": "rest", "base_url": "https://x"})
+        name, _ = source_from_args(self._args(source="openalex", source_config=path))
+        self.assertEqual(name, "openalex")
+
+    def test_extensions_and_excludes_reach_the_folder_source(self):
+        _, params = source_from_args(
+            self._args(input="docs", extensions="pdf,.docx", exclude=["out"]))
+        self.assertEqual(params["extensions"], [".pdf", ".docx"])
+        self.assertEqual(params["exclude"], ["out"])
 
 
 if __name__ == "__main__":

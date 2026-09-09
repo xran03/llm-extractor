@@ -1,6 +1,6 @@
 # Demo
 
-Four inputs and the output they produce, so you can see the artifact shapes
+Six inputs and the output they produce, so you can see the artifact shapes
 before spending a token.
 
 | File | What it is |
@@ -9,7 +9,9 @@ before spending a token.
 | `naca-figure-2.png` | one chart cropped out of that report |
 | `opa-scatter.png` | a scatter plot of vaccine titers, drawn for this demo |
 | `h5-titre-histogram-scatter.jpg` | a real published figure: a titre histogram and two scatter plots |
-| `results/` | reference output for all four |
+| `pcv13-opa-colonisation.pdf` | a published PCV13 trial reporting OPA titres, with per-subject scatter plots |
+| `fda-pcv15-approval-letter.pdf` | the FDA licensure letter for a 15-valent pneumococcal conjugate vaccine |
+| `results/` | reference output for all six |
 
 The first two come from **NACA Report 1372**, *A Method of Computing the Transient
 Temperature of Thick Walls from Arbitrary Variation of Adiabatic-Wall
@@ -31,6 +33,26 @@ is here because the three files above it were all made or chosen by us, and a
 demo that only ever meets figures of its own making is not evidence of
 anything.
 
+`pcv13-opa-colonisation.pdf` is Wolf, A.-S. *et al.*, *Quality of antibody
+responses by adults and young children to 13-valent pneumococcal conjugate
+vaccination and Streptococcus pneumoniae colonisation*, **Vaccine** 40(50):
+7201–7210 (2022), [doi:10.1016/j.vaccine.2022.09.069](https://doi.org/10.1016/j.vaccine.2022.09.069)
+([PMC10615833](https://europepmc.org/article/PMC/PMC10615833)). Reproduced
+unmodified under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+`fda-pcv15-approval-letter.pdf` is the FDA's BLA approval letter for
+Pneumococcal 15-valent Conjugate Vaccine (STN BL 125741/0, 16 July 2021),
+retrieved from [fda.gov](https://www.fda.gov/media/150820/download). It is a
+work of the U.S. Government and is **in the public domain**.
+
+Those last two are the vaccine case the extractor was built for, and they are
+here for two different reasons. The trial paper carries the shape that matters:
+OPA titres reported per subject, with values at the assay floor sitting beside
+values in the thousands — so a run that only recovers the impressive numbers is
+visibly wrong. The FDA letter is the opposite kind of document — no figures, no
+assay, just a regulatory sentence naming fifteen serotypes — and it is the
+cheapest way to see the `repeat_unit` column do its job.
+
 ## Why this document
 
 It is deliberately awkward, in the way real archives are:
@@ -47,7 +69,8 @@ where the vision pass earns its cost.
 
 ```bash
 # from the repository root, with credentials configured (see ../.env.example)
-llm-extract -i ./demo -o ./demo/out --api llmhub --ocr always
+llm-extract -i ./demo --exclude vaccine --extensions .pdf,.png,.jpg \
+            -o ./demo/out --ocr always
 ```
 
 Or use the wrappers:
@@ -59,6 +82,14 @@ Or use the wrappers:
 
 Then open `demo/out/records.csv`.
 
+The vaccine corpus is a separate run, because it wants a different question
+asked — `immunogenicity` records assay, serotype and censoring, where `generic`
+would only record that a sentence said something:
+
+```bash
+llm-extract -i ./demo/vaccine -o ./demo/out-vaccine --template immunogenicity
+```
+
 ## What comes out
 
 ```
@@ -66,6 +97,7 @@ results/
   records.csv                              every record from every document
   figures.csv                              every value read out of a figure
   summary.json                             run totals, tokens, cache statistics
+  vaccine/                                 the same shapes, immunogenicity template
   <doc>.records.jsonl                      lossless per-document records
   <doc>.records.csv                        the same rows as a table
   <doc>.ocr.json                           structured vision output per figure

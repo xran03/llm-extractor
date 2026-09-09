@@ -25,7 +25,8 @@ from .credstore import (delete_credentials, describe_store, save_credentials,
 from .ingest import describe_formats
 from .providers import ProviderError
 from .settings import DEFAULT_CACHE_DIR, build_settings
-from .sources import SOURCES, available_sources, build_source
+from .sources import (SOURCES, STARTER_CONNECTOR, SourceConfigError,
+                      available_sources, build_source, load_source_config)
 from .templates import (BUILTIN_TEMPLATES, STARTER_TEMPLATE, TemplateError,
                         load_template)
 
@@ -59,11 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(run)
     run.add_argument("-i", "--input", help="input folder (or file) to extract")
     run.add_argument("-o", "--output", default="out", help="output directory (default: out)")
-    run.add_argument("--source", default="folder",
-                     help=f"document source: {', '.join(sorted(available_sources()))}")
+    run.add_argument("--source", default=None,
+                     help=f"document source: {', '.join(sorted(available_sources()))} "
+                          f"(default: folder)")
     run.add_argument("--param", action="append", default=[], metavar="KEY=VALUE",
                      help="source parameter; repeatable (e.g. --param query=vaccine)")
+    run.add_argument("--source-config", default="", metavar="PATH",
+                     help="connector definition JSON (see 'sources --init')")
     run.add_argument("--extensions", help="comma-separated extension filter, e.g. .pdf,.docx")
+    run.add_argument("--exclude", action="append", default=[], metavar="DIR",
+                     help="subdirectory to skip; repeatable (e.g. --exclude out)")
     run.add_argument("--limit", type=int, default=0, help="stop after N documents")
     run.add_argument("--workers", type=int, help=argparse.SUPPRESS)
     run.add_argument("--rate-limit", type=int, default=0,
@@ -98,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
                            help="write a starter template JSON you can edit")
             p.add_argument("--validate", metavar="PATH",
                            help="check a template JSON and report any problem")
+        if name == "sources":
+            p.add_argument("--init", metavar="PATH",
+                           help="write a starter connector JSON you can edit")
 
     cache = sub.add_parser("cache", help="inspect or clear the response cache")
     _add_common(cache)
@@ -128,8 +137,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     bs = batch_sub.add_parser("submit", help="upload a corpus as one queued batch")
     _add_common(bs)
-    bs.add_argument("-i", "--input", required=True, help="folder (or file) to extract")
+    bs.add_argument("-i", "--input", help="folder (or file) to extract")
     bs.add_argument("-o", "--output", default="out", help="where the manifest and results go")
+    bs.add_argument("--source", default=None,
+                    help=f"document source: {', '.join(sorted(available_sources()))} "
+                         f"(default: folder)")
+    bs.add_argument("--param", action="append", default=[], metavar="KEY=VALUE",
+                    help="source parameter; repeatable (e.g. --param query=vaccine)")
+    bs.add_argument("--source-config", default="", metavar="PATH",
+                    help="connector definition JSON (see 'sources --init')")
     bs.add_argument("--extensions", help="comma-separated extension filter")
     bs.add_argument("--limit", type=int, default=0, help="stop after N documents")
     bs.add_argument("--figures", action="store_true",
@@ -247,27 +263,59 @@ def parse_params(pairs) -> dict:
     return params
 
 
+def source_from_args(args) -> tuple:
+    """Resolve which source to read and how, from flags and an optional config.
+
+    ``run`` and ``batch submit`` answer the same question — which documents —
+    and answered it separately for a while, which is how ``batch`` ended up able
+    to read a folder but not a literature search. One resolver means a connector
+    that works live works queued.
+
+    Precedence is least to most specific: the config file, then ``--param``,
+    then the dedicated flags. Someone overriding one setting on the command line
+    should not have to restate the other fifteen.
+    """
+    params: dict = {}
+    name = getattr(args, "source", None)
+
+    config_path = getattr(args, "source_config", "")
+    if config_path:
+        config = load_source_config(config_path)
+        name = name or config.pop("source", None)
+        config.pop("source", None)
+        params.update(config)
+
+    params.update(parse_params(getattr(args, "param", [])))
+    name = name or "folder"
+
+    if name == "folder" and getattr(args, "input", ""):
+        params.setdefault("input_dir", args.input)
+    if getattr(args, "extensions", ""):
+        params["extensions"] = [
+            e if e.startswith(".") else f".{e}"
+            for e in args.extensions.split(",") if e.strip()
+        ]
+    if getattr(args, "exclude", None):
+        params.setdefault("exclude", list(args.exclude))
+    if getattr(args, "limit", 0):
+        params.setdefault("limit", args.limit)
+    return name, params
+
+
 # --------------------------------- commands ---------------------------------
 def cmd_run(args) -> int:
     # Validate arguments before touching credentials or the network.
-    if args.source == "folder" and not args.input and \
-            "input_dir" not in parse_params(args.param):
+    try:
+        source_name, source_params = source_from_args(args)
+    except SourceConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if source_name == "folder" and not source_params.get("input_dir"):
         print("error: -i/--input is required for the folder source", file=sys.stderr)
         return 2
 
     settings = settings_from_args(args, allow_prompt=_interactive())
     template = load_template(settings.template)
-    source_params = parse_params(args.param)
-
-    if args.source == "folder":
-        source_params.setdefault("input_dir", args.input)
-        if args.extensions:
-            source_params["extensions"] = [
-                e if e.startswith(".") else f".{e}"
-                for e in args.extensions.split(",") if e.strip()
-            ]
-    if args.limit:
-        source_params.setdefault("limit", args.limit)
 
     bus = EventBus()
     if not args.quiet:
@@ -276,7 +324,7 @@ def cmd_run(args) -> int:
     from .runner import run_job
 
     summary = run_job(
-        settings, source_name=args.source, source_params=source_params,
+        settings, source_name=source_name, source_params=source_params,
         out_dir=args.output, bus=bus, resume=not args.no_resume,
         rate_limit=args.rate_limit,
     )
@@ -299,8 +347,22 @@ def cmd_run(args) -> int:
 
 
 def cmd_sources(args) -> int:
+    if getattr(args, "init", None):
+        path = Path(args.init)
+        if path.exists():
+            print(f"error: {path} already exists", file=sys.stderr)
+            return 2
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(STARTER_CONNECTOR, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+        print(f"wrote starter connector -> {path}")
+        print("it points at Crossref and runs as written; edit it, then:")
+        print(f"  llm-extract run --source-config {path} -o ./out")
+        return 0
+
     for name, description in sorted(available_sources().items()):
         print(f"{name:<14} {description}")
+    print("\ncustom connectors: llm-extract sources --init my-api.json")
     return 0
 
 
@@ -640,18 +702,19 @@ def cmd_batch(args) -> int:
 
     if action == "submit":
         template = load_template(settings.template)
-        source_params = {"input_dir": args.input}
-        if args.extensions:
-            source_params["extensions"] = [
-                e if e.startswith(".") else f".{e}"
-                for e in args.extensions.split(",") if e.strip()
-            ]
-        if args.limit:
-            source_params["limit"] = args.limit
+        try:
+            source_name, source_params = source_from_args(args)
+        except SourceConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if source_name == "folder" and not source_params.get("input_dir"):
+            print("error: -i/--input is required for the folder source", file=sys.stderr)
+            return 2
 
-        documents = list(build_source("folder", **source_params).iter_documents())
+        documents = list(build_source(source_name, **source_params).iter_documents())
         if not documents:
-            print(f"error: no readable documents under {args.input}", file=sys.stderr)
+            where = source_params.get("input_dir") or source_name
+            print(f"error: no readable documents from {where}", file=sys.stderr)
             return 2
 
         manifest = batchapi.submit(provider, documents, template, settings, out_dir,

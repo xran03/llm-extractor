@@ -229,21 +229,30 @@ def load_document(path, doc_id: str | None = None, with_figures: bool = False,
                     source_path=str(path), fmt=fmt, read_error=read_error)
 
 
-def discover(input_dir, extensions=None) -> list:
+def discover(input_dir, extensions=None, exclude=None) -> list:
     """Recursively list every readable document under ``input_dir``.
 
     Without a filter, files are included when their *content* is recognised, so
     extension-less and mislabelled files are picked up too.
+
+    ``exclude`` skips subdirectories, given either as a path relative to the
+    root or as a bare directory name to skip at any depth. Output directories
+    commonly live inside the input tree, and re-ingesting your own results is a
+    silent way to double a corpus.
     """
     root = Path(input_dir)
     if root.is_file():
         return [root]
 
+    skipped = {Path(item).as_posix().strip("/")
+               for item in (exclude or []) if str(item).strip()}
     allowed = ({e.lower() if e.startswith(".") else f".{e.lower()}" for e in extensions}
                if extensions else None)
     found = []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.name.startswith("."):
+            continue
+        if skipped and _is_excluded(path.relative_to(root).as_posix(), skipped):
             continue
         suffix = path.suffix.lower()
         if allowed is not None:
@@ -255,3 +264,10 @@ def discover(input_dir, extensions=None) -> list:
         if format_for_extension(suffix) is not None or detect_format(path) is not None:
             found.append(path)
     return found
+
+
+def _is_excluded(relative: str, skipped: set) -> bool:
+    """True when a relative path sits under one of the excluded directories."""
+    directories = relative.split("/")[:-1]
+    return any(relative == item or relative.startswith(f"{item}/") or item in directories
+               for item in skipped)

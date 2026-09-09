@@ -17,22 +17,26 @@ class FolderSource(Source):
                       "description": "Directory (or single file) to read."},
         "extensions": {"type": "array", "items": {"type": "string"},
                        "description": "Subset of the supported extensions."},
+        "exclude": {"type": "array", "items": {"type": "string"},
+                    "description": "Subdirectories to skip, by relative path or name."},
         "limit": {"type": "integer", "description": "Stop after N documents."},
     }
 
-    def __init__(self, input_dir, extensions=None, limit: int = 0, **params):
+    def __init__(self, input_dir, extensions=None, limit: int = 0, exclude=None, **params):
         super().__init__(input_dir=str(input_dir), extensions=extensions,
-                         limit=limit, **params)
+                         limit=limit, exclude=exclude, **params)
         # Absolute from the start: `Path.as_uri()` rejects relative paths, and
         # `-i docs` (or `-i ~/docs`) is what people actually type.
         self.input_dir = Path(input_dir).expanduser().resolve()
         self.extensions = extensions
+        self.exclude = list(exclude or [])
         self.limit = int(limit or 0)
 
     def _paths(self) -> list:
         if not self.input_dir.exists():
             raise FileNotFoundError(f"input path does not exist: {self.input_dir}")
-        paths = discover(self.input_dir, self.extensions or supported_extensions())
+        paths = discover(self.input_dir, self.extensions or supported_extensions(),
+                         exclude=self.exclude)
         return paths[: self.limit] if self.limit else paths
 
     def count(self):

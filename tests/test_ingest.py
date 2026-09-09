@@ -395,6 +395,18 @@ class DiscoverTest(unittest.TestCase):
     def test_extension_filter_accepts_bare_names(self):
         self.assertEqual(self._names(extensions=["xml"]), {"b.xml"})
 
+    def test_exclude_skips_a_subdirectory_by_name(self):
+        self.assertEqual(self._names(exclude=["nested"]), {"a.txt", "b.xml"})
+
+    def test_exclude_accepts_a_relative_path(self):
+        self.assertEqual(self._names(exclude=["nested/"]), {"a.txt", "b.xml"})
+
+    def test_exclude_leaves_everything_else_alone(self):
+        deeper = self.dir / "keep"
+        deeper.mkdir()
+        write_txt(deeper, "e.txt")
+        self.assertEqual(self._names(exclude=["nested"]), {"a.txt", "b.xml", "e.txt"})
+
     def test_mislabelled_file_is_still_discovered(self):
         (self.dir / "scan.pdf").write_bytes(PNG_BYTES)
         self.assertIn("scan.pdf", self._names())

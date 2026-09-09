@@ -12,6 +12,7 @@ REPO = Path(__file__).resolve().parents[1]
 TEMPLATES = REPO / "templates"
 DEMO = REPO / "demo"
 RESULTS = DEMO / "results"
+VACCINE = RESULTS / "vaccine"
 
 
 class ShippedTemplateTest(unittest.TestCase):
@@ -43,16 +44,31 @@ class DemoAssetTest(unittest.TestCase):
     def test_demo_inputs_are_present(self):
         self.assertTrue((DEMO / "naca-report-1372-excerpt.pdf").is_file())
         self.assertTrue((DEMO / "naca-figure-2.png").is_file())
+        self.assertTrue((DEMO / "vaccine" / "pcv13-opa-colonisation.pdf").is_file())
+        self.assertTrue((DEMO / "vaccine" / "fda-pcv15-approval-letter.pdf").is_file())
 
     def test_demo_documents_the_source_and_its_licence(self):
         readme = (DEMO / "README.md").read_text(encoding="utf-8")
         self.assertIn("public domain", readme.lower())
         self.assertIn("ntrs.nasa.gov", readme)
 
+    def test_every_redistributed_document_is_attributed(self):
+        """CC BY permits redistribution only with attribution; say where each came from."""
+        readme = (DEMO / "README.md").read_text(encoding="utf-8")
+        for marker in ("creativecommons.org/licenses/by/4.0/",
+                       "10.1016/j.vaccine.2022.09.069", "fda.gov"):
+            self.assertIn(marker, readme, f"{marker} missing from demo/README.md")
+
     def test_demo_inputs_stay_small(self):
         for name in ("naca-report-1372-excerpt.pdf", "naca-figure-2.png"):
             size_kb = (DEMO / name).stat().st_size / 1024
             self.assertLess(size_kb, 600, f"{name} is {size_kb:.0f} KB")
+
+    def test_no_demo_input_bloats_the_repository(self):
+        for path in sorted(DEMO.rglob("*")):
+            if path.is_file() and path.suffix.lower() in (".pdf", ".png", ".jpg"):
+                size_mb = path.stat().st_size / (1024 * 1024)
+                self.assertLess(size_mb, 2.0, f"{path.name} is {size_mb:.1f} MB")
 
 
 class DemoResultsTest(unittest.TestCase):
@@ -90,8 +106,8 @@ class DemoResultsTest(unittest.TestCase):
 
     def test_reference_output_is_machine_independent(self):
         """Committed artifacts must not carry the author's paths or timings."""
-        for path in sorted(RESULTS.glob("*.json")):
-            with self.subTest(artifact=path.name):
+        for path in sorted(RESULTS.rglob("*.json")):
+            with self.subTest(artifact=path.relative_to(RESULTS).as_posix()):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotIn(":\\", text, "absolute Windows path committed")
                 self.assertNotIn("file:///", text, "file URI committed")
@@ -109,6 +125,41 @@ class DemoResultsTest(unittest.TestCase):
         header = (RESULTS / "records.csv").read_text(
             encoding="utf-8-sig").splitlines()[0].strip().split(",")
         self.assertEqual(header, record_columns(load_template("generic")))
+
+
+class VaccineResultsTest(unittest.TestCase):
+    """The vaccine corpus is what the repeat-unit and OPA features exist for."""
+
+    def setUp(self):
+        self.rows = read_csv(VACCINE / "records.csv")
+
+    def test_records_were_produced(self):
+        self.assertTrue(self.rows)
+
+    def test_every_record_is_grounded(self):
+        for row in self.rows:
+            self.assertEqual(row["_grounded"], "true", row.get("group_label"))
+            self.assertNotEqual(row["_value_grounded"], "false", row.get("group_label"))
+
+    def test_every_serotype_resolves_to_a_repeat_unit(self):
+        named = [r for r in self.rows if r.get("serotype")]
+        self.assertTrue(named, "no serotype-bearing records in the vaccine corpus")
+        for row in named:
+            self.assertTrue(row["repeat_unit"], f"serotype {row['serotype']} unresolved")
+            self.assertTrue(row["repeat_unit_source"])
+
+    def test_the_control_arm_survived_alongside_the_responders(self):
+        """A run that keeps only the impressive numbers has misread the study."""
+        values = [float(r["value"]) for r in self.rows if r.get("value")]
+        self.assertTrue(any(v < 500 for v in values), "no low/control values kept")
+        self.assertTrue(any(v > 5000 for v in values), "no post-vaccination values kept")
+
+    def test_csv_columns_match_the_immunogenicity_template(self):
+        from llm_extractor.serialize import record_columns
+
+        header = (VACCINE / "records.csv").read_text(
+            encoding="utf-8-sig").splitlines()[0].strip().split(",")
+        self.assertEqual(header, record_columns(load_template("immunogenicity")))
 
 
 if __name__ == "__main__":

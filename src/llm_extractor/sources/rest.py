@@ -97,6 +97,32 @@ def read_search_terms(source) -> list:
     return unique
 
 
+#: A connector definition to edit, written by ``llm-extract sources --init``.
+#: The values point at Crossref, which is public and needs no key, so the file
+#: works as written and can be changed one field at a time rather than debugged
+#: all at once.
+STARTER_CONNECTOR = {
+    "source": "rest",
+    "base_url": "https://api.crossref.org",
+    "path": "/works",
+    "query_param": "query",
+    "search": "pneumococcal conjugate vaccine",
+    "query": {"filter": "type:journal-article,has-abstract:true"},
+    "records_path": "message.items",
+    "id_field": "DOI",
+    "title_field": "title.0",
+    "text_fields": ["abstract"],
+    "uri_field": "URL",
+    "paging": "offset",
+    "offset_param": "offset",
+    "size_param": "rows",
+    "page_size": 20,
+    "max_records": 100,
+    "auth": "none",
+    "auth_env": "",
+}
+
+
 @SOURCES.register("rest")
 class RestSource(Source):
     """Generic paginated JSON API source."""

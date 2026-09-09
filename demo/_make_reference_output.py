@@ -266,6 +266,105 @@ H5_AGGREGATE = {
 }
 
 
+# --- the vaccine corpus: OPA titres and a regulatory serotype list ----------
+#: What the PCV13/EHPC paper reports for serotype 6B, read off the results
+#: text. The control arm matters as much as the vaccine arm: a run that only
+#: recovers the 7132 has not understood the experiment.
+PCV13_OPA = [
+    ("PCV13-vaccinated adults", "baseline", 154,
+     "geometric mean OI for all PCV-vaccinees at baseline: 154 [95% CI 59–404]"),
+    ("PCV13-vaccinated adults", "post-vaccination", 7132,
+     "post- vaccination: 7132, [3268–15565]"),
+    ("PCV13-vaccinated adults", "post-challenge", 3122,
+     "geometric mean OI post-challenge: 3122 [1340–7273]"),
+    ("HepA-vaccinated controls", "baseline", 293,
+     "293 [40–2135]; post-vaccination: 382 [91–1598]; post-challenge: 164 [27–985]"),
+    ("HepA-vaccinated controls", "post-vaccination", 382,
+     "293 [40–2135]; post-vaccination: 382 [91–1598]; post-challenge: 164 [27–985]"),
+    ("HepA-vaccinated controls", "post-challenge", 164,
+     "293 [40–2135]; post-vaccination: 382 [91–1598]; post-challenge: 164 [27–985]"),
+]
+
+PCV13_RECORDS = [
+    {
+        "assay": "opa",
+        "endpoint": "opsonic index",
+        "group_label": f"{group}, {timepoint}",
+        "value": value,
+        "value_unit": "opsonic index",
+        "value_kind": "geometric_mean",
+        "value_source": "text",
+        "serotype": "6B",
+        "figure": "Fig. 2",
+        "notes": "Multiplexed opsonophagocytic killing assay; 6B was the challenge serotype.",
+        "source_span": span,
+    }
+    for group, timepoint, value, span in PCV13_OPA
+]
+
+#: The serotypes the FDA letter licenses, in the order the sentence lists them.
+#: One record each, because the template asks for one atomic fact per field —
+#: and because fifteen serotypes is the cheapest way to show `repeat_unit`
+#: resolving a whole valency at once.
+PCV15_SEROTYPES = ["1", "3", "4", "5", "6A", "6B", "7F", "9V", "14", "18C",
+                   "19A", "19F", "22F", "23F", "33F"]
+
+PCV15_SPAN = (
+    "invasive disease caused by Streptococcus pneumoniae serotypes 1, 3, 4, 5, "
+    "6A, 6B, 7F, 9V, 14, 18C, 19A, 19F, 22F, 23F and 33F in adults 18 years of "
+    "age and older"
+)
+
+FDA_RECORDS = [
+    {
+        "assay": "na",
+        "endpoint": "licensed indication",
+        "factor_type": "serotype",
+        "group_label": "Pneumococcal 15-valent Conjugate Vaccine",
+        "value": None,
+        "value_source": "text",
+        "serotype": serotype,
+        "notes": "Named in the approved indication for adults 18 years and older.",
+        "source_span": PCV15_SPAN,
+    }
+    for serotype in PCV15_SEROTYPES
+] + [
+    # Valency gets its own record because the indication sentence never says
+    # "15" — asserting it there would be a number its own evidence cannot show.
+    {
+        "assay": "na",
+        "endpoint": "valency",
+        "factor_type": "valency",
+        "group_label": "Pneumococcal 15-valent Conjugate Vaccine",
+        "value": None,
+        "value_source": "text",
+        "valency": 15,
+        "notes": "Stated in the licensing paragraph.",
+        "source_span": "We have approved your BLA for Pneumococcal 15-valent "
+                       "Conjugate Vaccine effective this date.",
+    },
+]
+
+VACCINE_AGGREGATE = {
+    "summary": "Two documents about pneumococcal conjugate vaccines: a challenge "
+               "study reporting serotype 6B opsonophagocytic killing in "
+               "PCV13-vaccinated adults against a hepatitis A-vaccinated "
+               "control arm, and the FDA letter licensing a 15-valent "
+               "conjugate vaccine.",
+    "key_findings": [
+        "PCV13 raised the serotype 6B geometric mean opsonic index from 154 to 7132.",
+        "The HepA control arm stayed between 164 and 382 throughout.",
+        "The 15-valent vaccine is licensed for fifteen named serotypes in adults.",
+    ],
+    "figure_insights": [],
+    "conflicts": [],
+    "coverage_gaps": [
+        "Individual subject opsonic indices are plotted per subject but never "
+        "written, so only the group geometric means were recovered.",
+    ],
+}
+
+
 class StubProvider:
     """Replays fixed answers instead of calling a model.
 
@@ -276,25 +375,36 @@ class StubProvider:
     name = "stub"
     API_STYLE = "stub"
 
+    #: doc_id prefix -> the answer for each stage. A prefix that is not listed
+    #: falls back to ``DEFAULT``, which is the NACA report.
+    DOCUMENTS = {
+        "naca-figure": {"extract": [], "ocr": FIGURE_OCR, "aggregate": AGGREGATE},
+        "opa-scatter": {"extract": [], "ocr": OPA_FIGURE_OCR, "aggregate": OPA_AGGREGATE},
+        "h5-titre": {"extract": [], "ocr": H5_FIGURE_OCR, "aggregate": H5_AGGREGATE},
+        "pcv13-opa-colonisation": {"extract": PCV13_RECORDS, "ocr": FIGURE_OCR,
+                                   "aggregate": VACCINE_AGGREGATE},
+        "fda-pcv15-approval-letter": {"extract": FDA_RECORDS, "ocr": FIGURE_OCR,
+                                      "aggregate": VACCINE_AGGREGATE},
+    }
+    DEFAULT = {"extract": PDF_RECORDS, "ocr": FIGURE_OCR, "aggregate": AGGREGATE}
+
     def list_models(self):
         return ["stub-model"]
+
+    def _answers(self, doc_id: str) -> dict:
+        for prefix, answers in self.DOCUMENTS.items():
+            if doc_id.startswith(prefix):
+                return answers
+        return self.DEFAULT
 
     def complete(self, messages, model, temperature=0.0, max_tokens=None,
                  json_schema=None, meta=None, **kwargs):
         stage = (meta or {}).get("stage", "extract")
-        doc_id = (meta or {}).get("doc_id", "")
-        scatter = doc_id.startswith("opa-scatter")
-        published = doc_id.startswith("h5-titre")
-        if stage == "ocr":
-            payload = json.dumps(H5_FIGURE_OCR if published else
-                                 OPA_FIGURE_OCR if scatter else FIGURE_OCR)
-        elif stage == "aggregate":
-            payload = json.dumps(H5_AGGREGATE if published else
-                                 OPA_AGGREGATE if scatter else AGGREGATE)
-        elif scatter or published or doc_id.startswith("naca-figure"):
-            payload = json.dumps({"records": []})
+        answers = self._answers((meta or {}).get("doc_id", ""))
+        if stage in ("ocr", "aggregate"):
+            payload = json.dumps(answers[stage])
         else:
-            payload = json.dumps({"records": PDF_RECORDS})
+            payload = json.dumps({"records": answers["extract"]})
         return Completion(text=payload,
                           usage=Usage(prompt_tokens=0, completion_tokens=0))
 
@@ -339,6 +449,17 @@ def stabilise_results(results: Path) -> None:
                         encoding="utf-8")
 
 
+#: The demo is two corpora, because the template decides what a record even is.
+#: The general one asks "what does this document state"; the vaccine one asks
+#: for assay, serotype and censoring, which is what makes `repeat_unit` resolve.
+CORPORA = (
+    {"name": "general", "template": "generic", "out": "results",
+     "input": ".", "exclude": ["vaccine", "results"]},
+    {"name": "vaccine", "template": "immunogenicity", "out": "results/vaccine",
+     "input": "vaccine", "exclude": []},
+)
+
+
 def main() -> int:
     results = DEMO / "results"
     if results.exists():
@@ -346,25 +467,35 @@ def main() -> int:
 
     runner.build_provider = lambda settings, **kwargs: StubProvider()
 
-    settings = Settings(
-        api="stub", base_url="https://stub", api_key="stub",
-        model="stub-model", ocr_model="stub-vision", agent_model="stub-mini",
-        cache_dir=str(DEMO / ".cache"), cache_enabled=False,
-        template="generic", ocr="always", max_workers=1,
-    )
-    summary = run_job(
-        settings, source_name="folder",
-        source_params={"input_dir": str(DEMO), "extensions": [".pdf", ".png", ".jpg"]},
-        out_dir=str(results), resume=False, job_id="demo",
-    )
-    shutil.rmtree(DEMO / ".cache", ignore_errors=True)
-    stabilise_results(results)
+    total_ok = total_docs = total_records = 0
+    for corpus in CORPORA:
+        out_dir = DEMO / corpus["out"]
+        settings = Settings(
+            api="stub", base_url="https://stub", api_key="stub",
+            model="stub-model", ocr_model="stub-vision", agent_model="stub-mini",
+            cache_dir=str(DEMO / ".cache"), cache_enabled=False,
+            template=corpus["template"], ocr="always", max_workers=1,
+        )
+        summary = run_job(
+            settings, source_name="folder",
+            source_params={"input_dir": str(DEMO / corpus["input"]),
+                           "extensions": [".pdf", ".png", ".jpg"],
+                           "exclude": corpus["exclude"]},
+            out_dir=str(out_dir), resume=False, job_id=f"demo-{corpus['name']}",
+        )
+        stabilise_results(out_dir)
+        total_ok += summary.ok
+        total_docs += summary.total
+        total_records += summary.records
+        print(f"[{corpus['name']:<8}] {summary.ok}/{summary.total} documents  "
+              f"{summary.records} records  {summary.figures} figures  "
+              f"({corpus['template']})")
 
-    print(f"documents {summary.ok}/{summary.total}   records {summary.records}   "
-          f"figures {summary.figures}")
-    for path in sorted(results.iterdir()):
-        print(f"  {path.name}")
-    return 0 if summary.ok else 1
+    shutil.rmtree(DEMO / ".cache", ignore_errors=True)
+    print(f"\ndocuments {total_ok}/{total_docs}   records {total_records}")
+    for path in sorted(results.rglob("*")):
+        print(f"  {path.relative_to(results).as_posix()}")
+    return 0 if total_ok else 1
 
 
 if __name__ == "__main__":

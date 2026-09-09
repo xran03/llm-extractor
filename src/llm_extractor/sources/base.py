@@ -12,6 +12,7 @@ A source yields :class:`SourceDocument` items lazily, so a query returning
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,6 +106,36 @@ class Source:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+class SourceConfigError(RuntimeError):
+    """Raised when a connector definition file cannot be read."""
+
+
+def load_source_config(path) -> dict:
+    """Read a connector definition from a JSON file.
+
+    A REST connector needs a dozen settings — base URL, paging style, the field
+    names carrying the id, title and body — and supplying those as a dozen
+    repeated ``--param`` flags is unreadable on the command line and impossible
+    to share. The same configuration in a file can be reviewed, kept in version
+    control, and handed to someone else unchanged.
+
+    The optional ``source`` key names the connector to build; every other key is
+    passed to it as a parameter.
+    """
+    config_path = Path(path)
+    if not config_path.is_file():
+        raise SourceConfigError(f"source config not found: {config_path}")
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SourceConfigError(f"{config_path}: not valid JSON: {exc}") from None
+    if not isinstance(config, dict):
+        raise SourceConfigError(
+            f"{config_path}: expected a JSON object, got {type(config).__name__}"
+        )
+    return config
 
 
 def build_source(name: str, **params) -> Source:

@@ -261,6 +261,53 @@ list covering three pathogens and the assay wordings. Point either connector at
 an internal mirror with `--param base_url=...`, and see `llm-extract sources`
 for everything registered.
 
+### Connecting a database we do not ship
+
+A patent office, a licensed literature service and an internal store differ from
+Europe PMC only in URL, paging, auth and field names — so those are
+configuration, not code. `rest` takes them as parameters, and since a real
+connector needs a dozen of them, it takes them as a **file** you can review,
+version and hand to someone else:
+
+```bash
+llm-extract sources --init crossref.json     # a working example to edit
+llm-extract run --source-config crossref.json -o ./out
+```
+
+```json
+{
+  "source": "rest",
+  "base_url": "https://api.crossref.org",
+  "path": "/works",
+  "query_param": "query",
+  "search": "pneumococcal conjugate vaccine",
+  "records_path": "message.items",
+  "id_field": "DOI",
+  "title_field": "title.0",
+  "text_fields": ["abstract"],
+  "uri_field": "URL",
+  "paging": "offset",
+  "offset_param": "offset",
+  "size_param": "rows",
+  "auth": "none"
+}
+```
+
+Auth is `none`, `bearer`, `header` or `query`, with the credential read from an
+environment variable named by `auth_env` — so a key lives in `.env` next to the
+model credentials rather than in the connector file you are about to share.
+`--param` overrides any single setting without restating the rest, which is what
+makes one shared file usable against a staging host.
+
+Paging covers `page`, `offset`, `cursor` and `none`. If an API needs more than
+that, a connector is a subclass that sets defaults (see
+[`sources/patents.py`](src/llm_extractor/sources/patents.py)) or a separate pip
+package publishing an `llm_extractor.sources` entry point — installing it is
+then the whole integration.
+
+The same flags work on `batch submit`, so a literature search can be queued
+rather than run live.
+
 Wrappers are provided for convenience: `./bin/llm-extract` and
 `./bin/llm-extract.ps1`.
 
@@ -381,15 +428,33 @@ comparison passes.
 
 ## Try it
 
-[`demo/`](demo/) ships a public-domain scanned report, one chart cropped out of
-it, and the output both produce — including a value the text layer does not
-contain and only the vision pass recovers.
+[`demo/`](demo/) ships two corpora and the output both produce, so you can see
+the artifact shapes before spending a token.
+
+The general corpus is a public-domain scanned report and a chart cropped out of
+it — including a value the text layer does not contain and only the vision pass
+recovers:
 
 ```bash
-llm-extract -i ./demo -o ./demo/out --ocr always
+llm-extract -i ./demo --exclude vaccine --extensions .pdf,.png,.jpg \
+            -o ./demo/out --ocr always
 ```
 
-See [demo/README.md](demo/README.md).
+The vaccine corpus is the case this was built for: a published PCV13 challenge
+study reporting serotype 6B opsonophagocytic titres against a control arm, and
+the FDA letter licensing a 15-valent conjugate vaccine. Both are redistributable
+— CC BY 4.0 and US Government public domain respectively:
+
+```bash
+llm-extract -i ./demo/vaccine -o ./demo/out-vaccine --template immunogenicity
+```
+
+That second run is what fills the `repeat_unit` column: fifteen serotypes named
+in one regulatory sentence, each resolved to the structure the measurement was
+made on. Reference output for both is committed under
+[`demo/results/`](demo/results/), and
+[`demo/README.md`](demo/README.md) carries the citation and licence for every
+document.
 
 ## Schemas you define
 
@@ -651,6 +716,32 @@ cost stays at two calls — one upload, one create — whether the corpus is 30
 documents or 30,000, and the answers land within the gateway's completion
 window. Run the corpus live when you want the results now; queue it when you
 want the machine back.
+
+### Choosing between them
+
+They are not competing implementations of one thing, which is why there is no
+single `--fast` switch. Live decides *how you spend the wait*; batch decides
+*whether you wait at all*. That makes the choice a question about the corpus and
+the deadline:
+
+| Situation | Use | Why |
+|---|---|---|
+| Iterating on a template or prompt | live | You need to see records to know if the schema is right. |
+| A few hundred documents, needed today | live | Bounded wait, results in the same session, cache warms as it goes. |
+| Thousands of documents, needed tomorrow | `batch submit` | Two calls, then close the laptop; no rate-limit pressure. |
+| Rate limit is the binding constraint | `batch submit` | Queued work is scheduled by the gateway, not by your retry loop. |
+| The gateway has no batch support | live | `batch preflight` tells you before you build a corpus. |
+
+Two practical cautions. Batch trades latency for throughput, so a 24-hour
+completion window is a real 24 hours — it is the wrong tool for anything
+interactive. And its answers arrive detached from their questions, which is why
+`submit` writes a manifest; a queued run cannot be reassembled without it, so
+the output directory matters more than in a live run.
+
+Both paths share the extraction code, the template, the grounding checks and the
+cache, so a corpus queued today and a document run live tomorrow produce the
+same columns and the same verdicts. Switching is a change of command, not a
+change of pipeline.
 
 ---
 
