@@ -173,7 +173,7 @@ class LiveReviewTest(unittest.TestCase):
         rows = records()
         annotated = review.review_document(
             FakeProvider(), rows, "post-vaccination: 7132 post-challenge: 164",
-            TEMPLATE, "d", model="claude-fable-5")
+            TEMPLATE, "d", model="scout-gpt-5.1")
         self.assertEqual(annotated, 2)
         self.assertFalse(rows[1]["_review_row"])
 
@@ -193,7 +193,7 @@ class BatchReviewTest(unittest.TestCase):
             "\n".join(json.dumps(r) for r in records()) + "\n", encoding="utf-8")
         self.settings = Settings(
             api="aimodelhub", base_url="https://gw", api_key="k",
-            model="gpt-5.6-sol", review_model="claude-fable-5",
+            model="gpt-5.6-sol", review_model="scout-gpt-5.1",
             cache_dir=str(self.dir / "c"), cache_enabled=False, aggregate=False)
         self.source = SourceDocument(doc_id="d", title="d", path=str(self.doc),
                                      source_name="folder")
@@ -205,7 +205,7 @@ class BatchReviewTest(unittest.TestCase):
         self.assertTrue(lines)
         self.assertEqual(tasks[0].stage, STAGE_REVIEW)
         self.assertEqual(tasks[0].payload["positions"], [0, 1])
-        self.assertEqual(lines[0]["body"]["model"], "claude-fable-5")
+        self.assertEqual(lines[0]["body"]["model"], "scout-gpt-5.1")
 
     def test_a_review_batch_is_marked_as_one(self):
         provider = make_provider(**{"/v1/files": {"id": "f1"},
@@ -214,7 +214,7 @@ class BatchReviewTest(unittest.TestCase):
             provider, [self.source], {"d": records()}, TEMPLATE, self.settings,
             self.out)
         self.assertEqual(manifest.kind, KIND_REVIEW)
-        self.assertEqual(manifest.model, "claude-fable-5")
+        self.assertEqual(manifest.model, "scout-gpt-5.1")
 
     def test_verdicts_are_merged_back_into_the_stored_records(self):
         lines, tasks = batchapi.build_review_requests(
@@ -262,3 +262,4 @@ class BatchReviewTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

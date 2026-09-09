@@ -125,14 +125,16 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
                                "template": template.name, "out_dir": str(out_path)}))
 
     def _work_key(source_doc) -> str:
-        """What "already done" means: this document, under this template.
+        """What "already done" means: this document, this question, this answerer.
 
         Resume keys on content so an unchanged document is not paid for twice.
-        The template belongs in that key for the same reason: a run under a
-        different template asked a different question, and the previous answers
-        do not answer it.
+        The template belongs in that key because a run under a different one
+        asked a different question. The backend and model belong in it for the
+        same reason: switching `--api` or `--model` and being told every
+        document was skipped looks like success and is not.
         """
-        return f"{source_doc.content_hash()}:{template.fingerprint()}"
+        return ":".join((source_doc.content_hash(), template.fingerprint(),
+                         settings.api, settings.model))
 
     def _work(source_doc):
         digest = source_doc.content_hash()

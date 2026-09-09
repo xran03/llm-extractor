@@ -37,7 +37,11 @@ BACKEND_DEFAULTS = {
         "model": "gpt-5.6-sol",
         "ocr_model": "gpt-5.6-sol",
         "agent_model": "gpt-5.6-sol",
-        "review_model": "claude-fable-5",
+        # A different model, not merely a different name: scout is a separate
+        # family from sol. Anthropic models are visible on this gateway but keys
+        # are commonly scoped away from them, and a default that 403s at call
+        # time is worse than a slightly weaker reviewer that runs.
+        "review_model": "scout-gpt-5.1",
     },
     "llmhub": {
         "model": DEFAULT_MODEL,
