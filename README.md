@@ -743,6 +743,50 @@ cache, so a corpus queued today and a document run live tomorrow produce the
 same columns and the same verdicts. Switching is a change of command, not a
 change of pipeline.
 
+### Reviewing what was extracted
+
+Grounding proves a record's quoted span exists and that its digits appear in
+that span. That catches invention, but not **misattribution**: a value can be
+real, its span real, and the row still wrong because the number was reported
+under a different assay, group or timepoint than the row names.
+
+`batch review` queues a second opinion over records that already exist, asking
+three questions per record and only these three:
+
+| Column | Question |
+|---|---|
+| `_review_value` | Does the document report this value for *this* row's subject, assay, group and timepoint? |
+| `_review_unit` | Is the unit the one the document states, rather than a converted or assumed one? |
+| `_review_row` | Do the fields describe **one** measurement, or has the row been stitched together from several? |
+
+`_review_row` is the one the deterministic checks cannot reach, and it is why
+the whole row is shown to the reviewer rather than the value alone.
+
+```bash
+llm-extract run -i ./docs -o ./out --template immunogenicity
+llm-extract batch review -i ./docs -o ./out        # queue the check
+llm-extract batch fetch -o ./out --wait            # merge verdicts into the CSV
+```
+
+Three things make the result trustworthy rather than decorative:
+
+- **Records are judged on the text they came from.** Each record is routed to
+  the chunk its evidence span belongs to, so a record from page 40 is reviewed
+  against page 40 rather than a truncated head of the document.
+- **Abstention is allowed.** A reviewer that cannot settle a question from the
+  text answers `null`, not `false`. An unsupported rejection costs as much as
+  the error it claims to find, so empty and rejected are different columns.
+- **Verdicts cannot slide.** The answer names records by the index its request
+  handed out, and the manifest maps that back to a row. A reply that comes back
+  short, reordered, or citing an index nobody asked about annotates only what it
+  legitimately covers.
+
+Review defaults to a different model family from extraction (`review_model`,
+`claude-fable-5` on the AI Model Hub), because a second opinion from the model
+that wrote the answer mostly restates it. `review.json` carries the run totals,
+and the four columns are only added once a review has actually run — an
+un-reviewed run does not ship empty columns implying a check nobody performed.
+
 ---
 
 ## Caching and cost

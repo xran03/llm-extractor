@@ -31,18 +31,23 @@ DERIVED_COLUMNS = ("repeat_unit", "repeat_unit_source")
 #: the fields that failed, so a flagged row can be checked without re-reading
 #: the whole record.
 TRAILING_COLUMNS = ("_grounded", "_value_grounded", "_unit_grounded", "_ungrounded")
+#: Second-opinion columns, written only once a review pass has run. They are
+#: kept out of TRAILING_COLUMNS so an un-reviewed run does not ship four empty
+#: columns implying a check nobody performed.
+REVIEW_COLUMNS = ("_review_value", "_review_unit", "_review_row", "_review_note")
+
+
+def record_columns(template, reviewed: bool = False) -> list:
+    """Stable column order: provenance, template fields, derived, audit flags."""
+    skip = set(LEADING_COLUMNS) | set(DERIVED_COLUMNS)
+    fields = [f for f in template.field_names if f not in skip]
+    columns = [*LEADING_COLUMNS, *fields, *DERIVED_COLUMNS, *TRAILING_COLUMNS]
+    return [*columns, *REVIEW_COLUMNS] if reviewed else columns
 
 FIGURE_COLUMNS = (
     "doc_id", "doc_title", "image", "figure_type", "caption",
     "axis_x", "axis_y", "series", "label", "value", "value_text", "unit", "note",
 )
-
-
-def record_columns(template) -> list:
-    """Stable column order: provenance, template fields, derived, audit flags."""
-    skip = set(LEADING_COLUMNS) | set(DERIVED_COLUMNS)
-    fields = [f for f in template.field_names if f not in skip]
-    return [*LEADING_COLUMNS, *fields, *DERIVED_COLUMNS, *TRAILING_COLUMNS]
 
 
 def _cell(value):
@@ -56,11 +61,12 @@ def _cell(value):
     return str(value)
 
 
-def write_records_csv(path, records, template, doc_title: str = "") -> Path:
+def write_records_csv(path, records, template, doc_title: str = "",
+                      reviewed: bool = False) -> Path:
     """Write records as CSV; returns the path written."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    columns = record_columns(template)
+    columns = record_columns(template, reviewed=reviewed)
     with path.open("w", encoding="utf-8-sig", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(columns)
@@ -178,7 +184,7 @@ def header_matches(path, columns) -> bool:
 
 
 def append_records_csv(path, records, template, doc_title: str = "",
-                       write_header: bool = False) -> Path:
+                       write_header: bool = False, reviewed: bool = False) -> Path:
     """Append rows to the run-level combined CSV.
 
     Documents finish one at a time, so the combined table is appended to as the
@@ -186,7 +192,7 @@ def append_records_csv(path, records, template, doc_title: str = "",
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    columns = record_columns(template)
+    columns = record_columns(template, reviewed=reviewed)
     mode = "w" if write_header or not path.exists() else "a"
     with path.open(mode, encoding="utf-8-sig", newline="") as fh:
         writer = csv.writer(fh)

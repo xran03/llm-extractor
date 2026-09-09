@@ -153,6 +153,22 @@ def build_parser() -> argparse.ArgumentParser:
     bs.add_argument("--completion-window", default="24h",
                     help="how long the gateway may take (default 24h)")
 
+    br = batch_sub.add_parser(
+        "review", help="queue a verification pass over records already extracted")
+    _add_common(br)
+    br.add_argument("-i", "--input", help="the documents the records came from")
+    br.add_argument("-o", "--output", default="out",
+                    help="directory holding the records to review")
+    br.add_argument("--source", default=None, help="document source (default: folder)")
+    br.add_argument("--param", action="append", default=[], metavar="KEY=VALUE",
+                    help="source parameter; repeatable")
+    br.add_argument("--source-config", default="", metavar="PATH",
+                    help="connector definition JSON (see 'sources --init')")
+    br.add_argument("--extensions", help="comma-separated extension filter")
+    br.add_argument("--limit", type=int, default=0, help="stop after N documents")
+    br.add_argument("--completion-window", default="24h",
+                    help="how long the gateway may take (default 24h)")
+
     for name, help_text in (("status", "report how far along a batch is"),
                             ("fetch", "download a finished batch and write artifacts"),
                             ("cancel", "cancel a running batch")):
@@ -700,7 +716,7 @@ def cmd_batch(args) -> int:
     out_dir = Path(args.output)
     manifest_path = out_dir / batchapi.MANIFEST_NAME
 
-    if action == "submit":
+    if action in ("submit", "review"):
         template = load_template(settings.template)
         try:
             source_name, source_params = source_from_args(args)
@@ -717,13 +733,31 @@ def cmd_batch(args) -> int:
             print(f"error: no readable documents from {where}", file=sys.stderr)
             return 2
 
-        manifest = batchapi.submit(provider, documents, template, settings, out_dir,
-                                   completion_window=args.completion_window,
-                                   with_ocr=args.figures)
+        if action == "submit":
+            manifest = batchapi.submit(provider, documents, template, settings, out_dir,
+                                       completion_window=args.completion_window,
+                                       with_ocr=args.figures)
+        else:
+            from .pipeline import load_records
+
+            records_by_doc = {}
+            for document in documents:
+                path = out_dir / f"{document.doc_id}.records.jsonl"
+                if path.is_file():
+                    records_by_doc[document.doc_id] = load_records(path)
+            if not any(records_by_doc.values()):
+                print(f"error: no records to review under {out_dir}; "
+                      f"run an extraction there first", file=sys.stderr)
+                return 2
+            manifest = batchapi.submit_review(
+                provider, documents, records_by_doc, template, settings, out_dir,
+                completion_window=args.completion_window)
+
         stages = {}
         for task in manifest.tasks:
             stages[task.stage] = stages.get(task.stage, 0) + 1
         print(f"batch     : {manifest.batch_id}")
+        print(f"kind      : {manifest.kind}   model: {manifest.model}")
         print(f"documents : {len(manifest.documents())}")
         print(f"requests  : {len(manifest.tasks)}  ({', '.join(f'{k}={v}' for k, v in sorted(stages.items()))})")
         print(f"manifest  : {manifest_path}")
@@ -766,15 +800,20 @@ def cmd_batch(args) -> int:
             _time.sleep(max(5, args.poll_seconds))
 
     template = load_template(manifest.template or settings.template)
+    reviewing = manifest.kind == batchapi.KIND_REVIEW
+    collector = batchapi.collect_review if reviewing else batchapi.collect
     try:
-        summary = batchapi.collect(provider, manifest, template, settings, out_dir)
+        summary = collector(provider, manifest, template, settings, out_dir)
     except ProviderError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print(f"\nstatus    : {summary['status']}")
-    print(f"documents : {summary['documents']}")
-    print(f"records   : {summary['records']}   figures: {summary['figures']}")
+    print(f"\ndocuments : {summary['documents']}")
+    if reviewing:
+        print(f"reviewed  : {summary['reviewed']}   flagged: {summary['flagged']}")
+    else:
+        print(f"status    : {summary['status']}")
+        print(f"records   : {summary['records']}   figures: {summary['figures']}")
     print(f"output    : {out_dir.resolve()}")
     for problem in summary["errors"][:5]:
         print(f"  ! {problem}", file=sys.stderr)

@@ -24,6 +24,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from . import review
 from .extract import build_messages, chunk_text, dedupe
 from .ingest import load_document, mime_for
 from .normalize import annotate_grounding, coerce_record
@@ -42,6 +43,12 @@ FINISHED = ("completed", "failed", "expired", "cancelled")
 #: later with nothing but a custom_id, so the manifest has to carry the rest.
 STAGE_EXTRACT = "extract"
 STAGE_OCR = "ocr"
+STAGE_REVIEW = "review"
+
+#: What a batch was submitted to do. A review batch starts from records that
+#: already exist, so its answers annotate rather than create.
+KIND_EXTRACT = "extract"
+KIND_REVIEW = "review"
 
 
 @dataclass
@@ -71,6 +78,7 @@ class Manifest:
     model: str = ""
     template: str = ""
     endpoint: str = ""
+    kind: str = KIND_EXTRACT
     created_at: float = field(default_factory=time.time)
     tasks: list = field(default_factory=list)
 
@@ -217,14 +225,13 @@ def build_requests(provider, documents, template, settings, with_ocr: bool = Fal
     return lines, tasks
 
 
-def submit(provider, documents, template, settings, out_dir,
-           completion_window: str = "24h", with_ocr: bool = False) -> Manifest:
-    """Upload the corpus as one batch and record the manifest."""
-    lines, tasks = build_requests(provider, documents, template, settings,
-                                  with_ocr=with_ocr)
-    if not lines:
-        raise ValueError("no readable text or figures in the selected documents")
+def _queue(provider, lines, tasks, settings, out_dir, completion_window,
+           template_name: str, kind: str, model: str) -> Manifest:
+    """Upload the request lines, create the batch, and record the manifest.
 
+    Shared by every batch kind: what differs between queueing an extraction and
+    queueing a review is which requests were built, not how they are sent.
+    """
     payload = "\n".join(json.dumps(line, ensure_ascii=False) for line in lines)
     uploaded = provider.upload_file(payload.encode("utf-8"), filename="requests.jsonl")
     file_id = uploaded.get("id")
@@ -239,11 +246,71 @@ def submit(provider, documents, template, settings, out_dir,
 
     manifest = Manifest(
         batch_id=batch_id, input_file_id=file_id, api=settings.api,
-        model=settings.model, template=template.name,
+        model=model, template=template_name, kind=kind,
         endpoint=provider.INFERENCE_PATH, tasks=tasks,
     )
     manifest.save(Path(out_dir) / MANIFEST_NAME)
     return manifest
+
+
+def submit(provider, documents, template, settings, out_dir,
+           completion_window: str = "24h", with_ocr: bool = False) -> Manifest:
+    """Upload the corpus as one batch and record the manifest."""
+    lines, tasks = build_requests(provider, documents, template, settings,
+                                  with_ocr=with_ocr)
+    if not lines:
+        raise ValueError("no readable text or figures in the selected documents")
+    return _queue(provider, lines, tasks, settings, out_dir, completion_window,
+                  template.name, KIND_EXTRACT, settings.model)
+
+
+def build_review_requests(provider, documents, records_by_doc, template,
+                          settings) -> tuple:
+    """Render a review request for every slice of every document's records.
+
+    Records are reviewed against the chunk their evidence came from, so the task
+    carries the positions it covers: the answer names records by the index it
+    was handed, and the manifest turns that back into rows in this document.
+    """
+    lines: list = []
+    tasks: list = []
+    for source_doc in documents:
+        records = records_by_doc.get(source_doc.doc_id) or []
+        if not records:
+            continue
+        document = load_source_document(source_doc, cache_dir=settings.cache_dir,
+                                        with_figures=False)
+        requests = review.plan(records, document.text)
+        for index, (chunk, positions) in enumerate(requests):
+            label = f" part {index + 1}/{len(requests)}" if len(requests) > 1 else ""
+            task = Task(custom_id=f"v-{len(tasks)}", stage=STAGE_REVIEW,
+                        doc_id=document.doc_id, chunk=index, n_chunks=len(requests),
+                        source_path=document.source_path, title=source_doc.title,
+                        uri=source_doc.uri,
+                        source_name=source_doc.source_name or "folder",
+                        payload={"positions": positions})
+            lines.append({
+                "custom_id": task.custom_id, "method": "POST",
+                "url": provider.INFERENCE_PATH,
+                "body": provider.build_payload(
+                    review.build_messages(records, positions, chunk, template,
+                                          document.doc_id, label),
+                    model=settings.review_model, temperature=0.0,
+                    max_tokens=4000, json_schema=review.REVIEW_JSON_SCHEMA),
+            })
+            tasks.append(task)
+    return lines, tasks
+
+
+def submit_review(provider, documents, records_by_doc, template, settings, out_dir,
+                  completion_window: str = "24h") -> Manifest:
+    """Queue a verification pass over records that already exist."""
+    lines, tasks = build_review_requests(provider, documents, records_by_doc,
+                                         template, settings)
+    if not lines:
+        raise ValueError("no records to review in the selected documents")
+    return _queue(provider, lines, tasks, settings, out_dir, completion_window,
+                  template.name, KIND_REVIEW, settings.review_model)
 
 
 # --------------------------------------------------------------------------
@@ -340,6 +407,86 @@ def figures_for_document(answers, tasks) -> tuple:
     return figures, errors
 
 
+def _finished_answers(provider, manifest: Manifest) -> dict:
+    """Download a finished batch's answers, or say precisely why it cannot be read."""
+    batch = provider.get_batch(manifest.batch_id)
+    state = batch.get("status")
+    if state not in FINISHED:
+        raise ProviderError(f"batch {manifest.batch_id} is still {state}")
+
+    output_id = batch.get("output_file_id")
+    if not output_id:
+        raise ProviderError(
+            f"batch {manifest.batch_id} finished as {state} with no output file; "
+            f"errors: {batch.get('error_file_id') or 'none reported'}")
+
+    return parse_output(provider, provider.download_file(output_id))
+
+
+def _write_json(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def collect_review(provider, manifest: Manifest, template, settings, out_dir) -> dict:
+    """Apply a finished review batch to the records it was built from.
+
+    The answers name records by the index each request handed out, so the
+    manifest's stored positions are what turn "verdict 3" back into a row in a
+    particular document. Records are re-read from disk and rewritten in place,
+    so a review adds columns to the run it reviewed rather than producing a
+    second set of artifacts to reconcile.
+    """
+    from .pipeline import load_records
+    from .serialize import (append_records_csv, record_columns, write_records_csv)
+
+    answers = _finished_answers(provider, manifest)
+    out_path = Path(out_dir)
+    wants_csv = settings.output_format in ("csv", "both")
+    combined = out_path / "records.csv"
+    started = False
+
+    summary = {"batch_id": manifest.batch_id, "kind": KIND_REVIEW,
+               "documents": 0, "reviewed": 0, "flagged": 0, "errors": []}
+
+    for doc_id in manifest.documents():
+        path = out_path / f"{doc_id}.records.jsonl"
+        if not path.is_file():
+            summary["errors"].append(f"{doc_id}: no records file to review at {path}")
+            continue
+        records = load_records(path)
+
+        for task in manifest.tasks_for(doc_id, STAGE_REVIEW):
+            answer = answers.get(task.custom_id)
+            if answer is None:
+                summary["errors"].append(f"{doc_id}: no answer for {task.custom_id}")
+                continue
+            if answer.get("error"):
+                summary["errors"].append(f"{doc_id}: {answer['error']}")
+                continue
+            positions = [p for p in (task.payload or {}).get("positions", [])
+                         if isinstance(p, int) and 0 <= p < len(records)]
+            review.apply_verdicts(records, positions, answer.get("text"))
+
+        stats = review.summary(records)
+        summary["documents"] += 1
+        summary["reviewed"] += stats["reviewed"]
+        summary["flagged"] += stats["flagged"]
+
+        path.write_text(
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
+            encoding="utf-8")
+        if wants_csv:
+            write_records_csv(out_path / f"{doc_id}.records.csv", records, template,
+                              reviewed=True)
+            append_records_csv(combined, records, template, write_header=not started,
+                               reviewed=True)
+            started = True
+
+    _write_json(out_path / "review.json", summary)
+    return summary
+
+
 def collect(provider, manifest: Manifest, template, settings, out_dir) -> dict:
     """Download a finished batch and write the ordinary per-document artifacts.
 
@@ -358,16 +505,7 @@ def collect(provider, manifest: Manifest, template, settings, out_dir) -> dict:
 
     batch = provider.get_batch(manifest.batch_id)
     state = batch.get("status")
-    if state not in FINISHED:
-        raise ProviderError(f"batch {manifest.batch_id} is still {state}")
-
-    output_id = batch.get("output_file_id")
-    if not output_id:
-        raise ProviderError(
-            f"batch {manifest.batch_id} finished as {state} with no output file; "
-            f"errors: {batch.get('error_file_id') or 'none reported'}")
-
-    answers = parse_output(provider, provider.download_file(output_id))
+    answers = _finished_answers(provider, manifest)
 
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
