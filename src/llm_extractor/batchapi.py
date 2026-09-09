@@ -437,11 +437,12 @@ def collect_review(provider, manifest: Manifest, template, settings, out_dir) ->
     so a review adds columns to the run it reviewed rather than producing a
     second set of artifacts to reconcile.
     """
-    from .pipeline import load_records
+    from .pipeline import documents_dir, load_records
     from .serialize import (append_records_csv, record_columns, write_records_csv)
 
     answers = _finished_answers(provider, manifest)
     out_path = Path(out_dir)
+    docs_path = documents_dir(out_path)
     wants_csv = settings.output_format in ("csv", "both")
     combined = out_path / "records.csv"
     started = False
@@ -450,7 +451,7 @@ def collect_review(provider, manifest: Manifest, template, settings, out_dir) ->
                "documents": 0, "reviewed": 0, "flagged": 0, "errors": []}
 
     for doc_id in manifest.documents():
-        path = out_path / f"{doc_id}.records.jsonl"
+        path = docs_path / f"{doc_id}.records.jsonl"
         if not path.is_file():
             summary["errors"].append(f"{doc_id}: no records file to review at {path}")
             continue
@@ -477,7 +478,7 @@ def collect_review(provider, manifest: Manifest, template, settings, out_dir) ->
             "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
             encoding="utf-8")
         if wants_csv:
-            write_records_csv(out_path / f"{doc_id}.records.csv", records, template,
+            write_records_csv(docs_path / f"{doc_id}.records.csv", records, template,
                               reviewed=True)
             append_records_csv(combined, records, template, write_header=not started,
                                reviewed=True)

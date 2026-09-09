@@ -124,18 +124,30 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
                                "api": settings.api, "model": settings.model,
                                "template": template.name, "out_dir": str(out_path)}))
 
+    def _work_key(source_doc) -> str:
+        """What "already done" means: this document, under this template.
+
+        Resume keys on content so an unchanged document is not paid for twice.
+        The template belongs in that key for the same reason: a run under a
+        different template asked a different question, and the previous answers
+        do not answer it.
+        """
+        return f"{source_doc.content_hash()}:{template.fingerprint()}"
+
     def _work(source_doc):
         digest = source_doc.content_hash()
-        if resume and digest in done_hashes:
-            artifact = done_hashes[digest]
+        key = _work_key(source_doc)
+        if resume and key in done_hashes:
+            artifact = done_hashes[key]
             if artifact and Path(artifact).exists():
                 raise Skip("unchanged since a previous successful run",
-                           result={"artifact": artifact, "hash": digest})
+                           result={"artifact": artifact, "hash": key})
         store.upsert_task(job_id, source_doc.doc_id, status=STATUS_RUNNING,
-                          content_hash=digest)
+                          content_hash=key)
         outcome = run_document(provider, source_doc, settings, template, out_path,
                                bus=bus, job_id=job_id)
         outcome.stats["content_hash"] = digest
+        outcome.stats["work_key"] = key
         return outcome
 
     # One combined table per run is what most people open first; it is appended
@@ -192,7 +204,7 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
         if task_result.status == "ok":
             summary.ok += 1
             store.upsert_task(job_id, doc_id, status=STATUS_OK,
-                              content_hash=outcome.stats.get("content_hash"),
+                              content_hash=outcome.stats.get("work_key"),
                               n_records=len(outcome.records),
                               artifact=outcome.artifacts.get("document"),
                               attempts=task_result.attempts,

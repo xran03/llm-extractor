@@ -98,6 +98,9 @@ class EndToEndTest(unittest.TestCase):
         write_pptx(self.docs, "deck.pptx")
         write_png(self.docs, "figure.png")
         self.out = self.dir / "out"
+        # Per-document artifacts live one level down; the combined tables and
+        # summary stay at the top of the output directory.
+        self.docs_out = self.out / "documents"
         self.cache = self.dir / "cache"
 
     def tearDown(self):
@@ -123,9 +126,9 @@ class EndToEndTest(unittest.TestCase):
 
     def test_all_three_artifacts_are_written_per_document(self):
         self._run("--api", "llmhub")
-        self.assertTrue((self.out / "report.records.jsonl").exists())
-        self.assertTrue((self.out / "report.document.json").exists())
-        self.assertTrue((self.out / "figure.ocr.json").exists())
+        self.assertTrue((self.docs_out / "report.records.jsonl").exists())
+        self.assertTrue((self.docs_out / "report.document.json").exists())
+        self.assertTrue((self.docs_out / "figure.ocr.json").exists())
         self.assertTrue((self.out / "summary.json").exists())
 
     def test_combined_csv_is_the_headline_table(self):
@@ -138,7 +141,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_per_document_csv_is_written(self):
         self._run("--api", "llmhub")
-        rows = read_csv(self.out / "report.records.csv")
+        rows = read_csv(self.docs_out / "report.records.csv")
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["subject"], "group A")
 
@@ -150,13 +153,13 @@ class EndToEndTest(unittest.TestCase):
 
     def test_csv_only_format_skips_jsonl(self):
         self._run("--api", "llmhub", "--format", "csv")
-        self.assertTrue((self.out / "report.records.csv").exists())
-        self.assertFalse((self.out / "report.records.jsonl").exists())
+        self.assertTrue((self.docs_out / "report.records.csv").exists())
+        self.assertFalse((self.docs_out / "report.records.jsonl").exists())
 
     def test_jsonl_only_format_skips_csv(self):
         self._run("--api", "llmhub", "--format", "jsonl")
-        self.assertTrue((self.out / "report.records.jsonl").exists())
-        self.assertFalse((self.out / "report.records.csv").exists())
+        self.assertTrue((self.docs_out / "report.records.jsonl").exists())
+        self.assertFalse((self.docs_out / "report.records.csv").exists())
         self.assertFalse((self.out / "records.csv").exists())
 
     def test_csv_columns_follow_the_template(self):
@@ -188,7 +191,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_document_json_has_records_ocr_and_aggregate(self):
         self._run("--api", "llmhub", "--ocr", "always")
-        payload = json.loads((self.out / "deck.document.json").read_text(encoding="utf-8"))
+        payload = json.loads((self.docs_out / "deck.document.json").read_text(encoding="utf-8"))
         self.assertEqual(len(payload["records"]), 2)
         self.assertTrue(payload["figures"])
         self.assertIn("summary", payload["aggregate"])
@@ -196,7 +199,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_records_are_normalized_and_grounded(self):
         self._run("--api", "llmhub")
-        line = (self.out / "report.records.jsonl").read_text(encoding="utf-8").splitlines()[0]
+        line = (self.docs_out / "report.records.jsonl").read_text(encoding="utf-8").splitlines()[0]
         record = json.loads(line)
         self.assertEqual(record["unit"], "µg/mL")
         self.assertTrue(record["_grounded"])
@@ -214,7 +217,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_both_backends_produce_the_same_records(self):
         self._run("--api", "llmhub")
-        first = (self.out / "report.records.jsonl").read_text(encoding="utf-8")
+        first = (self.docs_out / "report.records.jsonl").read_text(encoding="utf-8")
         second_out = self.dir / "out2"
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -222,7 +225,7 @@ class EndToEndTest(unittest.TestCase):
                       "--api", "aimodelhub", "--base-url", self.base_url,
                       "--api-key", "k", "--model", "fake-model",
                       "--cache-dir", str(self.dir / "cache2")])
-        second = (second_out / "report.records.jsonl").read_text(encoding="utf-8")
+        second = (second_out / "documents" / "report.records.jsonl").read_text(encoding="utf-8")
         self.assertEqual(json.loads(first.splitlines()[0])["value"],
                          json.loads(second.splitlines()[0])["value"])
 
@@ -331,3 +334,6 @@ class EndToEndTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+

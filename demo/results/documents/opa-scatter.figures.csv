@@ -1,0 +1,4 @@
+﻿doc_id,doc_title,image,figure_type,caption,axis_x,axis_y,series,label,value,value_text,unit,note
+opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,PCV13,814,GMT 814,OPA titer,geometric mean printed above the column
+opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,PCV20,437,GMT 437,OPA titer,geometric mean printed above the column
+opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,Placebo,15,GMT 15,OPA titer,geometric mean printed above the column

@@ -1,19 +1,19 @@
 {
-  "job_id": "demo-general",
-  "total": 4,
-  "ok": 4,
+  "job_id": "demo",
+  "total": 5,
+  "ok": 5,
   "failed": 0,
   "skipped": 0,
-  "records": 5,
-  "figures": 6,
+  "records": 22,
+  "figures": 10,
   "prompt_tokens": 0,
   "completion_tokens": 0,
   "cached_calls": 0,
   "duration_s": 0.0,
   "output_dir": "demo/results",
   "tables": {
-    "figures_csv": "demo/results/figures.csv",
-    "records_csv": "demo/results/records.csv"
+    "records_csv": "demo/results/records.csv",
+    "figures_csv": "demo/results/figures.csv"
   },
   "cache": {},
   "errors": []

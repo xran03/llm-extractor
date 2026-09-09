@@ -1,0 +1,101 @@
+[
+  {
+    "image": "pcv13-opa-figure2.png",
+    "path": "demo/pcv13-opa-figure2.png",
+    "ocr": {
+      "figure_type": "chart",
+      "caption": null,
+      "axis_x": "IgG titre (ug/ml)",
+      "axis_y": "Opsonic index",
+      "items": [
+        {
+          "label": "C: opsonic index vs IgG",
+          "series": "R2",
+          "value": 0.011,
+          "value_text": "R2= 0.011",
+          "unit": null,
+          "note": "printed inside panel C"
+        },
+        {
+          "label": "C: opsonic index vs IgG",
+          "series": "p",
+          "value": 0.675,
+          "value_text": "p= 0.675",
+          "unit": null,
+          "note": "printed inside panel C"
+        },
+        {
+          "label": "D: opsonic index vs IgG1",
+          "series": "R2",
+          "value": 0.351,
+          "value_text": "R2= 0.351",
+          "unit": null,
+          "note": "printed inside panel D"
+        },
+        {
+          "label": "D: opsonic index vs IgG1",
+          "series": "p",
+          "value": 0.012,
+          "value_text": "p= 0.012",
+          "unit": null,
+          "note": "the only panel reaching significance"
+        },
+        {
+          "label": "E: opsonic index vs IgG2",
+          "series": "R2",
+          "value": 0.0042,
+          "value_text": "R2= 0.0042",
+          "unit": null,
+          "note": "printed inside panel E"
+        },
+        {
+          "label": "E: opsonic index vs IgG2",
+          "series": "p",
+          "value": 0.792,
+          "value_text": "p= 0.792",
+          "unit": null,
+          "note": "printed inside panel E"
+        }
+      ],
+      "tables": [],
+      "text_blocks": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "Uncolonised",
+        "Colonised",
+        "Opsonic index",
+        "Baseline",
+        "Post-vacc",
+        "Post-chall",
+        "IgG titre (ug/ml)",
+        "IgG1 titre (ug/ml)",
+        "IgG2 titre (ug/ml)",
+        "R2= 0.011",
+        "p= 0.675",
+        "R2= 0.351",
+        "p= 0.012",
+        "R2= 0.0042",
+        "p= 0.792",
+        "****",
+        "**",
+        "100000",
+        "10000",
+        "1000",
+        "100",
+        "10",
+        "1"
+      ],
+      "notes": "Panels A and B plot one point per subject on a log axis; the individual values are drawn, never written, so only the printed statistics are reported. The significance bars in panel A are marked with asterisks rather than numbers."
+    },
+    "truncated": false,
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached": false
+    }
+  }
+]

@@ -14,6 +14,7 @@ file passed to ``--template``.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,6 +93,22 @@ class ExtractionTemplate:
             lines.append(f"- {f.name} [{f.type}]{enum}: {f.description}")
         lines += ["", GROUNDING_RULE]
         return "\n".join(lines)
+
+    def fingerprint(self) -> str:
+        """Stable digest of what this template actually asks for.
+
+        Resume matches documents by content, which is right until the question
+        changes: re-running a folder under a different template asked something
+        new, and answering it with the old run's records is wrong. Two templates
+        that differ only in name produce the same fingerprint, and one edited in
+        place produces a new one, because what matters is the request the model
+        will receive.
+        """
+        payload = json.dumps(
+            {"prompt": self.prompt(), "schema": self.json_schema(),
+             "system": self.system_prompt},
+            sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def json_schema(self) -> dict:
         """Strict JSON Schema for a ``{"records": [...]}`` envelope."""

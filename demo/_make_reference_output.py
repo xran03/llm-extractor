@@ -7,10 +7,10 @@ against a stub that returns fixed answers instead of a model.
 
 Two consequences worth knowing:
 
-* the numbers below were read out of the source document by hand, so the
-  reference output is factually correct about NACA Report 1372;
+* the numbers below were read out of the source documents by hand, so the
+  reference output is factually correct about these five documents;
 * grounding is still computed for real, so if a quoted span were not actually
-  present in the PDF, `_grounded` would come back false. Nothing here is
+  present in the source, `_grounded` would come back false. Nothing here is
   asserted by the pipeline that the source does not support.
 
 Run:  python demo/_make_reference_output.py
@@ -30,119 +30,7 @@ from llm_extractor.providers.base import Completion, Usage  # noqa: E402
 from llm_extractor.runner import run_job  # noqa: E402
 from llm_extractor.settings import Settings  # noqa: E402
 
-# --- facts taken verbatim from the excerpt's text layer ---------------------
-PDF_RECORDS = [
-    {
-        "subject": "example 1(b) copper wall",
-        "attribute": "wall thickness",
-        "value": 3, "unit": "inches",
-        "qualifier": "example 1(b)",
-        "value_source": "text",
-        "notes": "Same conditions as example 1(a) but a thicker wall.",
-        "source_span": "the copper wall is 3 inches thick, or 1=% foot",
-    },
-    {
-        "subject": "example 2 heating history",
-        "attribute": "adiabatic-wall temperature swing",
-        "value": 5000, "unit": "degrees",
-        "qualifier": "over 10 seconds",
-        "value_source": "text",
-        "notes": "Temperature rises and falls across this range during the run.",
-        "source_span": "rising and falling over 5,000",
-    },
-    {
-        "subject": "example 3 adiabatic-wall temperature",
-        "attribute": "first value of the assigned time series",
-        "value": 1365, "unit": "degrees",
-        "qualifier": "0.5-second intervals",
-        "value_source": "text",
-        "notes": "Start of the assigned Taw series used to drive the solution.",
-        "source_span": "following time series: Tam=1,365",
-    },
-    {
-        "subject": "example 3 wall",
-        "attribute": "wall thickness",
-        "value": 3, "unit": "inches",
-        "qualifier": "example 3",
-        "value_source": "text",
-        "notes": "Example 3 repeats example 2 with a thicker wall.",
-        "source_span": "that the wall is 3 inches thick",
-    },
-    {
-        "subject": "example 3 computing interval",
-        "attribute": "time step used for the thick-wall solution",
-        "value": None, "value_text": "one half second", "unit": "seconds",
-        "value_source": "text",
-        "notes": "Written as a fraction in the source, so no digits appear in the text layer.",
-        "source_span": "Solution (a) (thick-wall solution)",
-    },
-]
-
-# --- values that exist only in the chart, not in the text layer -------------
-FIGURE_OCR = {
-    "figure_type": "chart",
-    "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated "
-               "according to assigned history of h and Taw.",
-    "axis_x": "Time, sec",
-    "axis_y": "Wall surface temperature, deg F",
-    "items": [
-        {"label": "outer surface at t=2 s", "series": "Outer surface (present method)",
-         "value": 40, "value_text": None, "unit": "deg F", "note": "read from the curve"},
-        {"label": "outer surface at t=4 s", "series": "Outer surface (present method)",
-         "value": 120, "value_text": None, "unit": "deg F", "note": "read from the curve"},
-        {"label": "outer surface at t=6 s", "series": "Outer surface (present method)",
-         "value": 217, "value_text": None, "unit": "deg F", "note": "read from the curve"},
-        {"label": "outer surface at t=10 s", "series": "Outer surface (present method)",
-         "value": 300, "value_text": None, "unit": "deg F", "note": "curve plateau"},
-        {"label": "inner surface at t=6 s", "series": "Inner surface (present method)",
-         "value": 185, "value_text": None, "unit": "deg F", "note": "read from the curve"},
-        {"label": "inner surface at t=10 s", "series": "Inner surface (present method)",
-         "value": 297, "value_text": None, "unit": "deg F",
-         "note": "converges with the outer surface"},
-    ],
-    "tables": [],
-    "text_blocks": [
-        "Outer surface | Present method; d=1/2 sec",
-        "Inner surface | Present method; d=1/2 sec",
-        "Outer surface | Exact theory",
-        "Inner surface | Exact theory",
-        "Time, sec",
-        "Wall surface temperature, deg F",
-    ],
-    "notes": "Axis labels and the caption appear only in the image; the PDF text "
-             "layer does not contain them.",
-}
-
-AGGREGATE = {
-    "summary": "NACA Report 1372 presents a method for computing transient "
-               "temperatures of thick walls from an arbitrary history of "
-               "adiabatic-wall temperature and heat-transfer coefficient. The "
-               "excerpt works through examples with 1/2-inch and 3-inch copper "
-               "walls and compares the method against exact theory.",
-    "key_findings": [
-        "Example 1(b) repeats example 1(a) with a 3-inch copper wall.",
-        "The assigned adiabatic-wall temperature rises and falls over 5,000 degrees in 10 seconds.",
-        "Example 3 drives the solution with a tabulated Taw series starting at 1,365 degrees.",
-    ],
-    "figure_insights": [
-        {"image": "naca-figure-2.png",
-         "finding": "Outer-surface temperature reaches about 300 deg F at 10 s",
-         "value": 300, "unit": "deg F"},
-        {"image": "naca-figure-2.png",
-         "finding": "Inner and outer surface curves converge by 10 s",
-         "value": 297, "unit": "deg F"},
-    ],
-    "conflicts": [],
-    "coverage_gaps": [
-        "The computing interval is written as a fraction, so no numeric value "
-        "appears in the text layer.",
-        "Axis labels and figure captions are absent from the text layer and were "
-        "recovered only by the vision pass.",
-    ],
-}
-
-
-# --- the scatter plot: numbers that are drawn, never written ---------------
+#: --- the scatter plot we drew: numbers that exist only as pixels -----------
 #: What ``opa-scatter.png`` actually prints. It is generated by
 #: ``_make_opa_scatter.py``, so this reading is correct by construction rather
 #: than by someone reading values off a chart.
@@ -315,6 +203,74 @@ PCV15_SPAN = (
     "age and older"
 )
 
+#: --- a real published figure: numbers the text layer never carries ---------
+#: ``pcv13-opa-figure2.png`` is Figure 2 of the PCV13 paper. Panels A and B are
+#: per-subject dot plots of opsonic index; C, D and E are scatter plots whose
+#: R-squared and p values are drawn into the image. Every string below is
+#: printed on the figure and nowhere in the surrounding page furniture, which is
+#: the whole point: without the vision pass, none of it is recoverable.
+FIG2_OCR = {
+    "figure_type": "chart",
+    "caption": None,
+    "axis_x": "IgG titre (ug/ml)",
+    "axis_y": "Opsonic index",
+    "items": [
+        {"label": "C: opsonic index vs IgG", "series": "R2", "value": 0.011,
+         "value_text": "R2= 0.011", "unit": None,
+         "note": "printed inside panel C"},
+        {"label": "C: opsonic index vs IgG", "series": "p", "value": 0.675,
+         "value_text": "p= 0.675", "unit": None,
+         "note": "printed inside panel C"},
+        {"label": "D: opsonic index vs IgG1", "series": "R2", "value": 0.351,
+         "value_text": "R2= 0.351", "unit": None,
+         "note": "printed inside panel D"},
+        {"label": "D: opsonic index vs IgG1", "series": "p", "value": 0.012,
+         "value_text": "p= 0.012", "unit": None,
+         "note": "the only panel reaching significance"},
+        {"label": "E: opsonic index vs IgG2", "series": "R2", "value": 0.0042,
+         "value_text": "R2= 0.0042", "unit": None,
+         "note": "printed inside panel E"},
+        {"label": "E: opsonic index vs IgG2", "series": "p", "value": 0.792,
+         "value_text": "p= 0.792", "unit": None,
+         "note": "printed inside panel E"},
+    ],
+    "tables": [],
+    "text_blocks": [
+        "A", "B", "C", "D", "E",
+        "Uncolonised", "Colonised",
+        "Opsonic index", "Baseline", "Post-vacc", "Post-chall",
+        "IgG titre (ug/ml)", "IgG1 titre (ug/ml)", "IgG2 titre (ug/ml)",
+        "R2= 0.011", "p= 0.675", "R2= 0.351", "p= 0.012",
+        "R2= 0.0042", "p= 0.792",
+        "****", "**",
+        "100000", "10000", "1000", "100", "10", "1",
+    ],
+    "notes": "Panels A and B plot one point per subject on a log axis; the "
+             "individual values are drawn, never written, so only the printed "
+             "statistics are reported. The significance bars in panel A are "
+             "marked with asterisks rather than numbers.",
+}
+
+FIG2_AGGREGATE = {
+    "summary": "Figure 2 of the PCV13 challenge study: per-subject opsonic "
+               "index by timepoint and colonisation outcome (A, B), and its "
+               "correlation with IgG, IgG1 and IgG2 titres (C, D, E).",
+    "key_findings": [
+        "Opsonic index correlates with IgG1 titre (R2 = 0.351, p = 0.012).",
+        "No correlation with whole IgG (R2 = 0.011) or IgG2 (R2 = 0.0042).",
+    ],
+    "figure_insights": [
+        {"image": "pcv13-opa-figure2.png",
+         "finding": "opsonic index vs IgG1 titre", "value": 0.351, "unit": "R2"},
+    ],
+    "conflicts": [],
+    "coverage_gaps": [
+        "The individual subject opsonic indices in panels A and B are plotted "
+        "but never written, so no per-subject value was recovered.",
+    ],
+}
+
+
 FDA_RECORDS = [
     {
         "assay": "na",
@@ -376,17 +332,21 @@ class StubProvider:
     API_STYLE = "stub"
 
     #: doc_id prefix -> the answer for each stage. A prefix that is not listed
-    #: falls back to ``DEFAULT``, which is the NACA report.
+    #: falls back to ``DEFAULT``, which reports nothing rather than inventing
+    #: records for a document nobody wrote answers for.
     DOCUMENTS = {
-        "naca-figure": {"extract": [], "ocr": FIGURE_OCR, "aggregate": AGGREGATE},
-        "opa-scatter": {"extract": [], "ocr": OPA_FIGURE_OCR, "aggregate": OPA_AGGREGATE},
-        "h5-titre": {"extract": [], "ocr": H5_FIGURE_OCR, "aggregate": H5_AGGREGATE},
-        "pcv13-opa-colonisation": {"extract": PCV13_RECORDS, "ocr": FIGURE_OCR,
+        "pcv13-opa-figure2": {"extract": [], "ocr": FIG2_OCR,
+                              "aggregate": FIG2_AGGREGATE},
+        "opa-scatter": {"extract": [], "ocr": OPA_FIGURE_OCR,
+                        "aggregate": OPA_AGGREGATE},
+        "h5-titre": {"extract": [], "ocr": H5_FIGURE_OCR,
+                     "aggregate": H5_AGGREGATE},
+        "pcv13-opa-colonisation": {"extract": PCV13_RECORDS, "ocr": FIG2_OCR,
                                    "aggregate": VACCINE_AGGREGATE},
-        "fda-pcv15-approval-letter": {"extract": FDA_RECORDS, "ocr": FIGURE_OCR,
+        "fda-pcv15-approval-letter": {"extract": FDA_RECORDS, "ocr": FIG2_OCR,
                                       "aggregate": VACCINE_AGGREGATE},
     }
-    DEFAULT = {"extract": PDF_RECORDS, "ocr": FIGURE_OCR, "aggregate": AGGREGATE}
+    DEFAULT = {"extract": [], "ocr": FIG2_OCR, "aggregate": VACCINE_AGGREGATE}
 
     def list_models(self):
         return ["stub-model"]
@@ -443,21 +403,10 @@ def stabilise_results(results: Path) -> None:
     a fresh timestamp, so every regeneration shows a diff and the committed
     output is not reproducible on another machine.
     """
-    for path in sorted(results.glob("*.json")):
+    for path in sorted(results.rglob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         path.write_text(json.dumps(_stabilise(data), ensure_ascii=False, indent=2),
                         encoding="utf-8")
-
-
-#: The demo is two corpora, because the template decides what a record even is.
-#: The general one asks "what does this document state"; the vaccine one asks
-#: for assay, serotype and censoring, which is what makes `repeat_unit` resolve.
-CORPORA = (
-    {"name": "general", "template": "generic", "out": "results",
-     "input": ".", "exclude": ["vaccine", "results"]},
-    {"name": "vaccine", "template": "immunogenicity", "out": "results/vaccine",
-     "input": "vaccine", "exclude": []},
-)
 
 
 def main() -> int:
@@ -467,35 +416,27 @@ def main() -> int:
 
     runner.build_provider = lambda settings, **kwargs: StubProvider()
 
-    total_ok = total_docs = total_records = 0
-    for corpus in CORPORA:
-        out_dir = DEMO / corpus["out"]
-        settings = Settings(
-            api="stub", base_url="https://stub", api_key="stub",
-            model="stub-model", ocr_model="stub-vision", agent_model="stub-mini",
-            cache_dir=str(DEMO / ".cache"), cache_enabled=False,
-            template=corpus["template"], ocr="always", max_workers=1,
-        )
-        summary = run_job(
-            settings, source_name="folder",
-            source_params={"input_dir": str(DEMO / corpus["input"]),
-                           "extensions": [".pdf", ".png", ".jpg"],
-                           "exclude": corpus["exclude"]},
-            out_dir=str(out_dir), resume=False, job_id=f"demo-{corpus['name']}",
-        )
-        stabilise_results(out_dir)
-        total_ok += summary.ok
-        total_docs += summary.total
-        total_records += summary.records
-        print(f"[{corpus['name']:<8}] {summary.ok}/{summary.total} documents  "
-              f"{summary.records} records  {summary.figures} figures  "
-              f"({corpus['template']})")
-
+    settings = Settings(
+        api="stub", base_url="https://stub", api_key="stub",
+        model="stub-model", ocr_model="stub-vision", agent_model="stub-mini",
+        cache_dir=str(DEMO / ".cache"), cache_enabled=False,
+        template="immunogenicity", ocr="always", max_workers=1,
+    )
+    summary = run_job(
+        settings, source_name="folder",
+        source_params={"input_dir": str(DEMO),
+                       "extensions": [".pdf", ".png", ".jpg"],
+                       "exclude": ["results", "out"]},
+        out_dir=str(results), resume=False, job_id="demo",
+    )
+    stabilise_results(results)
     shutil.rmtree(DEMO / ".cache", ignore_errors=True)
-    print(f"\ndocuments {total_ok}/{total_docs}   records {total_records}")
+
+    print(f"documents {summary.ok}/{summary.total}   records {summary.records}   "
+          f"figures {summary.figures}")
     for path in sorted(results.rglob("*")):
         print(f"  {path.relative_to(results).as_posix()}")
-    return 0 if total_ok else 1
+    return 0 if summary.ok else 1
 
 
 if __name__ == "__main__":

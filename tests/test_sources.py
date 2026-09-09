@@ -15,7 +15,7 @@ from llm_extractor.sources.base import (Source, SourceConfigError, SourceDocumen
 from llm_extractor.sources.literature import EuropePMCSource, OpenAlexSource
 from llm_extractor.sources.patents import PatentSearchSource
 from llm_extractor.sources.rest import (STARTER_CONNECTOR, RestSource,
-                                        RestSourceError, dig)
+                                        RestSourceError, dig, sniff_media)
 
 from ._fakes import write_docx, write_png, write_txt, write_xml
 
@@ -371,6 +371,109 @@ class SourceFromArgsTest(unittest.TestCase):
             self._args(input="docs", extensions="pdf,.docx", exclude=["out"]))
         self.assertEqual(params["extensions"], [".pdf", ".docx"])
         self.assertEqual(params["exclude"], ["out"])
+
+
+class QueryOrderTest(unittest.TestCase):
+    """Europe PMC answers hitCount=0 unless the search term comes first."""
+
+    def test_the_search_term_leads_the_query_string(self):
+        source = EuropePMCSource(search="pneumococcal")
+        url = source._build_url({"page": 1, "pageSize": 100})
+        self.assertIn("?query=", url, url)
+
+    def test_other_parameters_survive(self):
+        source = EuropePMCSource(search="pneumococcal")
+        url = source._build_url({"page": 2})
+        for expected in ("format=json", "resultType=core", "page=2"):
+            self.assertIn(expected, url)
+
+
+class SniffMediaTest(unittest.TestCase):
+    def test_recognises_what_it_can(self):
+        self.assertEqual(sniff_media(b"%PDF-1.7 ..."), "pdf")
+        self.assertEqual(sniff_media(b"<!DOCTYPE html><html>"), "html")
+        self.assertEqual(sniff_media(b"  <?xml version='1.0'?><article>"), "xml")
+        self.assertEqual(sniff_media(b"\n<!DOCTYPE article PUBLIC>"), "xml")
+
+    def test_says_nothing_when_unsure(self):
+        self.assertEqual(sniff_media(b"\x00\x01binary"), "")
+
+
+class FullTextTest(unittest.TestCase):
+    RECORD = {"id": "1", "title": "T", "abstractText": "an abstract"}
+
+    def _source(self, fetcher, **params):
+        return RestSource(base_url="https://x", id_field="id", title_field="title",
+                          text_fields=["abstractText"], fulltext=True,
+                          fulltext_field="pdf", fulltext_fetcher=fetcher, **params)
+
+    def test_a_fetched_body_replaces_the_abstract(self):
+        source = self._source(lambda url: b"%PDF-1.7 body")
+        document = source.to_document({**self.RECORD, "pdf": "https://x/a.pdf"})
+        self.assertEqual(document.blob, b"%PDF-1.7 body")
+        self.assertEqual(document.media_type, "pdf")
+        self.assertIn("an abstract", document.text, "abstract must survive as fallback")
+
+    def test_a_failed_download_leaves_the_abstract_in_place(self):
+        source = self._source(lambda url: None)
+        document = source.to_document({**self.RECORD, "pdf": "https://x/a.pdf"})
+        self.assertEqual(document.blob, b"")
+        self.assertIn("an abstract", document.text)
+        self.assertIn("unavailable", document.metadata["fulltext"])
+
+    def test_a_landing_page_is_refused_rather_than_extracted(self):
+        source = self._source(lambda url: b"<!DOCTYPE html><html>sign in</html>")
+        document = source.to_document({**self.RECORD, "pdf": "https://x/a.pdf"})
+        self.assertEqual(document.blob, b"")
+        self.assertIn("returned html", document.metadata["fulltext"])
+
+    def test_a_record_advertising_nothing_is_recorded_as_such(self):
+        source = self._source(lambda url: b"%PDF")
+        document = source.to_document(self.RECORD)
+        self.assertEqual(document.metadata["fulltext"], "none advertised")
+
+    def test_nothing_is_fetched_unless_asked(self):
+        calls = []
+        source = RestSource(base_url="https://x", id_field="id",
+                            fulltext_field="pdf",
+                            fulltext_fetcher=lambda url: calls.append(url))
+        source.to_document({**self.RECORD, "pdf": "https://x/a.pdf"})
+        self.assertEqual(calls, [])
+
+
+class LiteratureFullTextTargetTest(unittest.TestCase):
+    OPEN = {"pmcid": "PMC1", "isOpenAccess": "Y", "inEPMC": "Y"}
+
+    def test_europepmc_uses_the_jats_endpoint_for_open_articles(self):
+        url, media = EuropePMCSource().fulltext_target(self.OPEN)
+        self.assertTrue(url.endswith("/PMC1/fullTextXML"))
+        self.assertEqual(media, "xml")
+
+    def test_europepmc_refuses_anything_not_openly_held(self):
+        for missing in ("pmcid", "isOpenAccess", "inEPMC"):
+            record = {**self.OPEN, missing: "N" if missing != "pmcid" else ""}
+            self.assertIsNone(EuropePMCSource().fulltext_target(record), missing)
+
+    def test_openalex_prefers_a_real_pdf_link(self):
+        record = {"open_access": {"is_oa": True, "oa_url": "https://x/landing"},
+                  "best_oa_location": {"pdf_url": "https://x/a.pdf"}}
+        self.assertEqual(OpenAlexSource().fulltext_target(record),
+                         ("https://x/a.pdf", "pdf"))
+
+    def test_openalex_ignores_an_oa_url_that_is_not_a_pdf(self):
+        record = {"open_access": {"is_oa": True, "oa_url": "https://x/landing"},
+                  "best_oa_location": {}}
+        self.assertIsNone(OpenAlexSource().fulltext_target(record))
+
+    def test_openalex_refuses_closed_works(self):
+        record = {"open_access": {"is_oa": False},
+                  "best_oa_location": {"pdf_url": "https://x/a.pdf"}}
+        self.assertIsNone(OpenAlexSource().fulltext_target(record))
+
+    def test_an_openalex_record_without_an_abstract_still_carries_its_title(self):
+        document = OpenAlexSource().to_document(
+            {"id": "W1", "display_name": "A study of things"})
+        self.assertIn("A study of things", document.text)
 
 
 if __name__ == "__main__":

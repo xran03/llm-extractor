@@ -70,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--extensions", help="comma-separated extension filter, e.g. .pdf,.docx")
     run.add_argument("--exclude", action="append", default=[], metavar="DIR",
                      help="subdirectory to skip; repeatable (e.g. --exclude out)")
+    run.add_argument("--fulltext", action="store_true",
+                     help="fetch open-access full text from a literature source "
+                          "instead of the abstract")
     run.add_argument("--limit", type=int, default=0, help="stop after N documents")
     run.add_argument("--workers", type=int, help=argparse.SUPPRESS)
     run.add_argument("--rate-limit", type=int, default=0,
@@ -147,6 +150,8 @@ def build_parser() -> argparse.ArgumentParser:
     bs.add_argument("--source-config", default="", metavar="PATH",
                     help="connector definition JSON (see 'sources --init')")
     bs.add_argument("--extensions", help="comma-separated extension filter")
+    bs.add_argument("--fulltext", action="store_true",
+                    help="fetch open-access full text instead of the abstract")
     bs.add_argument("--limit", type=int, default=0, help="stop after N documents")
     bs.add_argument("--figures", action="store_true",
                     help="queue figure OCR in the same batch")
@@ -313,6 +318,8 @@ def source_from_args(args) -> tuple:
         ]
     if getattr(args, "exclude", None):
         params.setdefault("exclude", list(args.exclude))
+    if getattr(args, "fulltext", False):
+        params.setdefault("fulltext", True)
     if getattr(args, "limit", 0):
         params.setdefault("limit", args.limit)
     return name, params
@@ -738,11 +745,11 @@ def cmd_batch(args) -> int:
                                        completion_window=args.completion_window,
                                        with_ocr=args.figures)
         else:
-            from .pipeline import load_records
+            from .pipeline import documents_dir, load_records
 
             records_by_doc = {}
             for document in documents:
-                path = out_dir / f"{document.doc_id}.records.jsonl"
+                path = documents_dir(out_dir) / f"{document.doc_id}.records.jsonl"
                 if path.is_file():
                     records_by_doc[document.doc_id] = load_records(path)
             if not any(records_by_doc.values()):

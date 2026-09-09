@@ -188,7 +188,8 @@ class BatchReviewTest(unittest.TestCase):
         self.doc = self.dir / "d.txt"
         self.doc.write_text("post-vaccination: 7132\npost-challenge: 164\n",
                             encoding="utf-8")
-        (self.out / "d.records.jsonl").write_text(
+        (self.out / "documents").mkdir(parents=True, exist_ok=True)
+        (self.out / "documents" / "d.records.jsonl").write_text(
             "\n".join(json.dumps(r) for r in records()) + "\n", encoding="utf-8")
         self.settings = Settings(
             api="aimodelhub", base_url="https://gw", api_key="k",

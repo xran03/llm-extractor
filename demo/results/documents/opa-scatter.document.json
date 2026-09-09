@@ -9,7 +9,7 @@
     "bytes": 36143
   },
   "stats": {
-    "template": "generic",
+    "template": "immunogenicity",
     "api": "stub",
     "model": "stub-model",
     "format": "png",

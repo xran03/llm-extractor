@@ -1,9 +1,9 @@
 {
   "doc_id": "fda-pcv15-approval-letter",
   "title": "fda-pcv15-approval-letter",
-  "uri": "demo/vaccine/fda-pcv15-approval-letter.pdf",
+  "uri": "demo/fda-pcv15-approval-letter.pdf",
   "source": "folder",
-  "source_path": "demo/vaccine/fda-pcv15-approval-letter.pdf",
+  "source_path": "demo/fda-pcv15-approval-letter.pdf",
   "metadata": {
     "relative_path": "fda-pcv15-approval-letter.pdf",
     "bytes": 118986
@@ -583,69 +583,91 @@
       "path": "demo/.cache/media/pdf/fda-pcv15-approval-letter/fda-pcv15-approval-letter-p001.png",
       "ocr": {
         "figure_type": "chart",
-        "caption": "FIGURE 2.-Example 2. Temperatures of 1/2-inch copper wall heated according to assigned history of h and Taw.",
-        "axis_x": "Time, sec",
-        "axis_y": "Wall surface temperature, deg F",
+        "caption": null,
+        "axis_x": "IgG titre (ug/ml)",
+        "axis_y": "Opsonic index",
         "items": [
           {
-            "label": "outer surface at t=2 s",
-            "series": "Outer surface (present method)",
-            "value": 40,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "read from the curve"
+            "label": "C: opsonic index vs IgG",
+            "series": "R2",
+            "value": 0.011,
+            "value_text": "R2= 0.011",
+            "unit": null,
+            "note": "printed inside panel C"
           },
           {
-            "label": "outer surface at t=4 s",
-            "series": "Outer surface (present method)",
-            "value": 120,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "read from the curve"
+            "label": "C: opsonic index vs IgG",
+            "series": "p",
+            "value": 0.675,
+            "value_text": "p= 0.675",
+            "unit": null,
+            "note": "printed inside panel C"
           },
           {
-            "label": "outer surface at t=6 s",
-            "series": "Outer surface (present method)",
-            "value": 217,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "read from the curve"
+            "label": "D: opsonic index vs IgG1",
+            "series": "R2",
+            "value": 0.351,
+            "value_text": "R2= 0.351",
+            "unit": null,
+            "note": "printed inside panel D"
           },
           {
-            "label": "outer surface at t=10 s",
-            "series": "Outer surface (present method)",
-            "value": 300,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "curve plateau"
+            "label": "D: opsonic index vs IgG1",
+            "series": "p",
+            "value": 0.012,
+            "value_text": "p= 0.012",
+            "unit": null,
+            "note": "the only panel reaching significance"
           },
           {
-            "label": "inner surface at t=6 s",
-            "series": "Inner surface (present method)",
-            "value": 185,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "read from the curve"
+            "label": "E: opsonic index vs IgG2",
+            "series": "R2",
+            "value": 0.0042,
+            "value_text": "R2= 0.0042",
+            "unit": null,
+            "note": "printed inside panel E"
           },
           {
-            "label": "inner surface at t=10 s",
-            "series": "Inner surface (present method)",
-            "value": 297,
-            "value_text": null,
-            "unit": "deg F",
-            "note": "converges with the outer surface"
+            "label": "E: opsonic index vs IgG2",
+            "series": "p",
+            "value": 0.792,
+            "value_text": "p= 0.792",
+            "unit": null,
+            "note": "printed inside panel E"
           }
         ],
         "tables": [],
         "text_blocks": [
-          "Outer surface | Present method; d=1/2 sec",
-          "Inner surface | Present method; d=1/2 sec",
-          "Outer surface | Exact theory",
-          "Inner surface | Exact theory",
-          "Time, sec",
-          "Wall surface temperature, deg F"
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "Uncolonised",
+          "Colonised",
+          "Opsonic index",
+          "Baseline",
+          "Post-vacc",
+          "Post-chall",
+          "IgG titre (ug/ml)",
+          "IgG1 titre (ug/ml)",
+          "IgG2 titre (ug/ml)",
+          "R2= 0.011",
+          "p= 0.675",
+          "R2= 0.351",
+          "p= 0.012",
+          "R2= 0.0042",
+          "p= 0.792",
+          "****",
+          "**",
+          "100000",
+          "10000",
+          "1000",
+          "100",
+          "10",
+          "1"
         ],
-        "notes": "Axis labels and the caption appear only in the image; the PDF text layer does not contain them."
+        "notes": "Panels A and B plot one point per subject on a log axis; the individual values are drawn, never written, so only the printed statistics are reported. The significance bars in panel A are marked with asterisks rather than numbers."
       },
       "truncated": false,
       "usage": {

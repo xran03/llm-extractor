@@ -227,6 +227,21 @@ class RunnerTest(unittest.TestCase):
         self._run(resume=False)
         self.assertEqual(len(read_csv(self.out / "records.csv")), before)
 
+    def test_a_different_template_is_not_treated_as_already_done(self):
+        """A run under a new template asked a new question; old answers do not answer it."""
+        self._run()
+        settings = make_settings(self.dir)
+        settings.template = "immunogenicity"
+        summary = run_job(settings, source_name="folder",
+                          source_params={"input_dir": str(self.docs)},
+                          out_dir=str(self.out), store=self.store, resume=True)
+        self.assertEqual(summary.skipped, 0, "template change must not resume")
+        self.assertEqual(summary.ok, 3)
+
+    def test_the_same_template_still_resumes(self):
+        self._run()
+        self.assertEqual(self._run(resume=True).skipped, 3)
+
     def test_a_different_template_replaces_the_combined_table(self):
         """Appending new columns under the old header would misdescribe the rows."""
         from llm_extractor.serialize import read_csv

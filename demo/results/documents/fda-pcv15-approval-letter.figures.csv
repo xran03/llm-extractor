@@ -1,0 +1,7 @@
+﻿doc_id,doc_title,image,figure_type,caption,axis_x,axis_y,series,label,value,value_text,unit,note
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,C: opsonic index vs IgG,0.011,R2= 0.011,,printed inside panel C
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,C: opsonic index vs IgG,0.675,p= 0.675,,printed inside panel C
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,D: opsonic index vs IgG1,0.351,R2= 0.351,,printed inside panel D
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,D: opsonic index vs IgG1,0.012,p= 0.012,,the only panel reaching significance
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,E: opsonic index vs IgG2,0.0042,R2= 0.0042,,printed inside panel E
+fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,E: opsonic index vs IgG2,0.792,p= 0.792,,printed inside panel E

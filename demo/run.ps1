@@ -10,8 +10,10 @@ $root = Split-Path -Parent $here
 
 & (Join-Path $root 'bin\llm-extract.ps1') `
     --input $here `
-    --exclude vaccine `
+    --exclude results `
+    --exclude out `
     --extensions .pdf,.png,.jpg `
+    --template immunogenicity `
     --output (Join-Path $here 'out') `
     --ocr always `
     --format both `

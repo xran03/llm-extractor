@@ -52,6 +52,24 @@ class EuropePMCSource(RestSource):
                 document.uri = f"https://doi.org/{raw['doi']}"
         return document
 
+    def fulltext_target(self, raw: dict):
+        """The JATS full text, but only for articles Europe PMC hosts openly.
+
+        Both flags are required. ``isOpenAccess`` says we may read it;
+        ``inEPMC`` says Europe PMC actually holds it, and without that the
+        endpoint answers with an error page rather than an article.
+
+        JATS XML is preferred over the PDF on purpose: the pipeline parses it
+        natively, so sections and tables survive as structure instead of being
+        recovered from a rendering of themselves.
+        """
+        pmcid = str(raw.get("pmcid") or "").strip()
+        if not pmcid:
+            return None
+        if raw.get("isOpenAccess") != "Y" or raw.get("inEPMC") != "Y":
+            return None
+        return f"{self.base_url}/{pmcid}/fullTextXML", "xml"
+
 
 @SOURCES.register("openalex")
 class OpenAlexSource(RestSource):
@@ -83,17 +101,44 @@ class OpenAlexSource(RestSource):
         if document is None:
             return None
         # OpenAlex ships abstracts as an inverted index; rebuild reading order.
+        # It also omits the field entirely for a growing number of works, so the
+        # title is always included: a record with neither would arrive as an
+        # empty document and be extracted into nothing at full price.
         inverted = raw.get("abstract_inverted_index") or {}
+        parts = [f"## title\n{document.title}"] if document.title else []
         if inverted:
             positions = {}
             for word, spots in inverted.items():
                 for spot in spots:
                     positions[spot] = word
-            abstract = " ".join(positions[i] for i in sorted(positions))
-            document.text = f"## title\n{document.title}\n\n## abstract\n{abstract}"
+            parts.append("## abstract\n" + " ".join(positions[i]
+                                                    for i in sorted(positions)))
+        if parts:
+            document.text = "\n\n".join(parts)
         document.metadata.update({
             "year": raw.get("publication_year"),
             "type": raw.get("type"),
             "cited_by_count": raw.get("cited_by_count"),
+            "oa_status": dig(raw, "open_access.oa_status"),
+            "license": dig(raw, "best_oa_location.license"),
         })
         return document
+
+    def fulltext_target(self, raw: dict):
+        """The best open-access PDF OpenAlex knows about, if the work is OA.
+
+        OpenAlex indexes locations rather than hosting them, so the URL points
+        at a publisher or repository. Many publishers refuse automated fetches
+        even for their own open-access articles — that refusal is expected and
+        handled softly, leaving the abstract in place. Europe PMC is the more
+        reliable route to full text when an article is in PMC.
+        """
+        if not dig(raw, "open_access.is_oa"):
+            return None
+        url = dig(raw, "best_oa_location.pdf_url") or ""
+        if not url:
+            # `oa_url` is often a landing page rather than the article, so it is
+            # only trusted when it names a PDF outright.
+            candidate = str(dig(raw, "open_access.oa_url") or "")
+            url = candidate if candidate.lower().endswith(".pdf") else ""
+        return (str(url), "pdf") if url else None

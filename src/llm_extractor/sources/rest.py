@@ -34,6 +34,31 @@ class RestSourceError(RuntimeError):
     """Raised when an upstream database API cannot be read."""
 
 
+#: Identifies us to publishers when fetching full text. A contactable agent is
+#: what keeps a polite harvester distinguishable from a scraper.
+FULLTEXT_USER_AGENT = "llm-extractor/1.0 (+https://github.com/xran03/llm-extractor)"
+
+
+def sniff_media(body: bytes) -> str:
+    """Identify a downloaded body from its first bytes, or ``""`` if unsure.
+
+    Open-access links routinely resolve to a landing page rather than the
+    article: the URL says PDF, the server returns HTML, and nothing complains.
+    Believing the URL would feed a navigation page to the extractor and bill for
+    it, so what arrived is checked against what was promised.
+    """
+    head = body[:2048].lstrip()
+    if head.startswith(b"%PDF"):
+        return "pdf"
+    lowered = head[:600].lower()
+    if lowered.startswith(b"<!doctype html") or lowered.startswith(b"<html"):
+        return "html"
+    if head.startswith(b"<?xml") or head.startswith(b"<article") \
+            or b"<!doctype article" in lowered:
+        return "xml"
+    return ""
+
+
 def dig(payload, path: str, default=None):
     """Read a dotted path out of nested JSON (``"data.items"``, ``"hits.0.id"``)."""
     if not path:
@@ -149,6 +174,12 @@ class RestSource(Source):
         "max_records": {"type": "integer"},
         "auth": {"type": "string", "enum": ["none", "bearer", "header", "query"]},
         "auth_env": {"type": "string", "description": "Env var holding the credential."},
+        "fulltext": {"type": "boolean",
+                     "description": "Fetch open-access full text instead of the abstract."},
+        "fulltext_field": {"type": "string",
+                           "description": "Dotted path to a full-text URL in the record."},
+        "fulltext_media": {"type": "string",
+                           "description": "Media type of the fetched body (pdf, xml, html)."},
     }
 
     # Subclasses override these to become a named connector.
@@ -218,6 +249,12 @@ class RestSource(Source):
         self.max_retries = int(merged.get("max_retries", 3))
         self.delay = float(merged.get("delay", 0.0))
         self.headers = dict(merged.get("headers") or {})
+        self.fulltext = bool(merged.get("fulltext", False))
+        self.fulltext_field = merged.get("fulltext_field", "")
+        self.fulltext_media = merged.get("fulltext_media", "pdf")
+        # A body large enough to be a whole issue is a mistake, not an article.
+        self.fulltext_max_bytes = int(merged.get("fulltext_max_bytes", 40 << 20))
+        self._fulltext_fetcher = merged.get("fulltext_fetcher")  # injected in tests
         self._fetcher = merged.get("fetcher")  # injected in tests
         self._total = None
 
@@ -231,8 +268,16 @@ class RestSource(Source):
             credential = self._credential()
             if credential:
                 params[self.auth_query_param] = credential
+        # Lead with the search term. Europe PMC answers hitCount=0 when `query`
+        # is not the first parameter — the same request, reordered, returns the
+        # article — and a search that silently finds nothing is far worse than
+        # one that fails. Leading with it is harmless for every other API.
+        ordered = {}
+        if self.query_param in params:
+            ordered[self.query_param] = params.pop(self.query_param)
+        ordered.update(params)
         query = urllib.parse.urlencode(
-            {k: v for k, v in params.items() if v is not None}, doseq=True
+            {k: v for k, v in ordered.items() if v is not None}, doseq=True
         )
         return f"{self.base_url}{self.path}" + (f"?{query}" if query else "")
 
@@ -348,6 +393,55 @@ class RestSource(Source):
                         return
 
     # ------------------------------- mapping --------------------------------
+    def fulltext_target(self, raw: dict):
+        """Where this record's **open-access** full text lives.
+
+        Returns ``(url, media_type)`` or ``None``. The default reads a URL out
+        of the record at ``fulltext_field``; connectors override it to apply the
+        access rules their API publishes.
+
+        The rule this hook exists to enforce: only ever return a location the
+        API itself marks as open access. An abstract is a poor substitute for
+        full text, but it is a far better outcome than fetching something we
+        were not licensed to fetch.
+        """
+        if not self.fulltext_field:
+            return None
+        url = str(dig(raw, self.fulltext_field) or "").strip()
+        return (url, self.fulltext_media) if url else None
+
+    def fetch_fulltext(self, url: str):
+        """Download one full-text body. Returns bytes, or ``None`` on any failure.
+
+        Failure is soft on purpose: a corpus of 500 papers will always contain a
+        few whose full text has moved, gone behind a login or died. Losing the
+        run over one of them would be worse than extracting that one from its
+        abstract.
+        """
+        if self._fulltext_fetcher is not None:
+            return self._fulltext_fetcher(url)
+        request = urllib.request.Request(
+            url, method="GET",
+            headers={"Accept": "*/*", "User-Agent": FULLTEXT_USER_AGENT})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                # A single read() may return short on a chunked response, so
+                # read until EOF rather than trusting one call to deliver the
+                # whole body. Getting this wrong truncates papers silently.
+                chunks, total = [], 0
+                while True:
+                    chunk = response.read(1 << 16)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > self.fulltext_max_bytes:
+                        return None
+                    chunks.append(chunk)
+                return b"".join(chunks) or None
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
+                ConnectionError, OSError):
+            return None
+
     def to_document(self, raw: dict):
         """Map one API record to a :class:`SourceDocument`.
 
@@ -366,7 +460,7 @@ class RestSource(Source):
                 value = "\n".join(str(v) for v in value if v)
             if value:
                 parts.append(f"## {field_path}\n{value}")
-        return SourceDocument(
+        document = SourceDocument(
             doc_id=str(doc_id).replace("/", "_"),
             title=str(dig(raw, self.title_field) or ""),
             uri=str(dig(raw, self.uri_field) or ""),
@@ -375,3 +469,32 @@ class RestSource(Source):
             source_name=self.name,
             metadata={"raw": raw} if len(parts) == 0 else {"api_record_keys": sorted(raw)},
         )
+        if self.fulltext:
+            self.attach_fulltext(document, raw)
+        return document
+
+    def attach_fulltext(self, document, raw: dict) -> bool:
+        """Replace the abstract with the open-access full text, when there is one.
+
+        The abstract stays on the document either way, so a record whose full
+        text could not be fetched is still extractable — just from less. What
+        actually happened is recorded in ``fulltext`` metadata rather than left
+        for the reader to infer from the record's length.
+        """
+        target = self.fulltext_target(raw)
+        if not target:
+            document.metadata["fulltext"] = "none advertised"
+            return False
+        url, media = target
+        body = self.fetch_fulltext(url)
+        if not body:
+            document.metadata["fulltext"] = f"unavailable: {url}"
+            return False
+        actual = sniff_media(body)
+        if actual and actual != media:
+            document.metadata["fulltext"] = f"unusable: {url} returned {actual}"
+            return False
+        document.blob = body
+        document.media_type = actual or media
+        document.metadata.update({"fulltext": url, "fulltext_bytes": len(body)})
+        return True

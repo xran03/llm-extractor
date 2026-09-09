@@ -7,8 +7,10 @@ root="$(dirname "$here")"
 
 exec "${root}/bin/llm-extract" \
   --input "$here" \
-  --exclude vaccine \
+  --exclude results \
+  --exclude out \
   --extensions .pdf,.png,.jpg \
+  --template immunogenicity \
   --output "${here}/out" \
   --ocr always \
   --format both \

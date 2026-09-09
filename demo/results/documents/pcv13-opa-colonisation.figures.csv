@@ -1,14 +1,4 @@
 ﻿doc_id,doc_title,image,figure_type,caption,axis_x,axis_y,series,label,value,value_text,unit,note
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,C: opsonic index vs IgG,0.011,R2= 0.011,,printed inside panel C
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,C: opsonic index vs IgG,0.675,p= 0.675,,printed inside panel C
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,D: opsonic index vs IgG1,0.351,R2= 0.351,,printed inside panel D
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,D: opsonic index vs IgG1,0.012,p= 0.012,,the only panel reaching significance
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,E: opsonic index vs IgG2,0.0042,R2= 0.0042,,printed inside panel E
-fda-pcv15-approval-letter,fda-pcv15-approval-letter,fda-pcv15-approval-letter-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,E: opsonic index vs IgG2,0.792,p= 0.792,,printed inside panel E
-h5-titre-histogram-scatter,h5-titre-histogram-scatter,h5-titre-histogram-scatter.jpg,mixed,,,,,,,,,
-opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,PCV13,814,GMT 814,OPA titer,geometric mean printed above the column
-opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,PCV20,437,GMT 437,OPA titer,geometric mean printed above the column
-opa-scatter,opa-scatter,opa-scatter.png,chart,Figure 1. Serotype 6B OPA titers 28 days after vaccination.,Vaccine group,OPA titer (1/dilution),Day 28,Placebo,15,GMT 15,OPA titer,geometric mean printed above the column
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,C: opsonic index vs IgG,0.011,R2= 0.011,,printed inside panel C
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p001.png,chart,,IgG titre (ug/ml),Opsonic index,p,C: opsonic index vs IgG,0.675,p= 0.675,,printed inside panel C
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p001.png,chart,,IgG titre (ug/ml),Opsonic index,R2,D: opsonic index vs IgG1,0.351,R2= 0.351,,printed inside panel D
@@ -45,9 +35,3 @@ pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p008.png,ch
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p008.png,chart,,IgG titre (ug/ml),Opsonic index,p,D: opsonic index vs IgG1,0.012,p= 0.012,,the only panel reaching significance
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p008.png,chart,,IgG titre (ug/ml),Opsonic index,R2,E: opsonic index vs IgG2,0.0042,R2= 0.0042,,printed inside panel E
 pcv13-opa-colonisation,pcv13-opa-colonisation,pcv13-opa-colonisation-p008.png,chart,,IgG titre (ug/ml),Opsonic index,p,E: opsonic index vs IgG2,0.792,p= 0.792,,printed inside panel E
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,R2,C: opsonic index vs IgG,0.011,R2= 0.011,,printed inside panel C
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,p,C: opsonic index vs IgG,0.675,p= 0.675,,printed inside panel C
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,R2,D: opsonic index vs IgG1,0.351,R2= 0.351,,printed inside panel D
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,p,D: opsonic index vs IgG1,0.012,p= 0.012,,the only panel reaching significance
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,R2,E: opsonic index vs IgG2,0.0042,R2= 0.0042,,printed inside panel E
-pcv13-opa-figure2,pcv13-opa-figure2,pcv13-opa-figure2.png,chart,,IgG titre (ug/ml),Opsonic index,p,E: opsonic index vs IgG2,0.792,p= 0.792,,printed inside panel E

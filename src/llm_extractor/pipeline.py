@@ -23,11 +23,14 @@ OCR policies trade cost against recall:
             the text pass produced nothing/ungrounded records (default);
 ``always``  both passes every time — highest recall, highest cost.
 
-Artifacts written per document:
+Artifacts written per document, under ``documents/`` in the output directory:
 
 ``<doc_id>.records.jsonl``   one extracted record per line (stable format)
 ``<doc_id>.ocr.json``        structured OCR readings per figure
 ``<doc_id>.document.json``   the aggregated document envelope
+
+The combined tables (``records.csv``, ``figures.csv``, ``summary.json``) stay at
+the top level, because those are what a run is usually opened for.
 """
 from __future__ import annotations
 
@@ -321,6 +324,17 @@ def run_document(provider, source_doc, settings, template, out_dir,
     return result
 
 
+#: Per-document artifacts live here, one level down. What most people want is
+#: the combined table, and burying it among four files per document made a
+#: 200-document run hard to even look at — let alone stitch to another one.
+DOCUMENTS_DIR = "documents"
+
+
+def documents_dir(out_dir) -> Path:
+    """Where per-document artifacts belong under an output directory."""
+    return Path(out_dir) / DOCUMENTS_DIR
+
+
 def write_artifacts(result: DocumentResult, source_doc, out_dir: Path, template,
                     output_format: str = "both") -> dict:
     """Write the per-document artifacts and return their paths.
@@ -329,7 +343,8 @@ def write_artifacts(result: DocumentResult, source_doc, out_dir: Path, template,
     for analysis. ``document.json`` is always written because it is the only
     artifact that carries the aggregate.
     """
-    out_dir = Path(out_dir)
+    out_dir = documents_dir(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     artifacts: dict = {}
     wants_jsonl = output_format in ("jsonl", "both")
     wants_csv = output_format in ("csv", "both")
@@ -378,9 +393,18 @@ def write_artifacts(result: DocumentResult, source_doc, out_dir: Path, template,
 
 
 def load_records(path) -> list:
-    """Read records from one ``.records.jsonl`` file, or a directory of them."""
+    """Read records from one ``.records.jsonl`` file, or a directory of them.
+
+    A directory may be either an output directory or the ``documents/`` folder
+    inside one, because both are things people reasonably point at.
+    """
     path = Path(path)
-    files = sorted(path.glob("*.records.jsonl")) if path.is_dir() else [path]
+    if path.is_dir():
+        nested = path / DOCUMENTS_DIR
+        search = nested if nested.is_dir() else path
+        files = sorted(search.glob("*.records.jsonl"))
+    else:
+        files = [path]
     records = []
     for file in files:
         for line in file.read_text(encoding="utf-8").splitlines():
