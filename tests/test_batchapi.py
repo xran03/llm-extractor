@@ -164,18 +164,22 @@ class BuildRequestsTest(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertEqual({t.doc_id for t in tasks}, {"a", "b"})
 
-    def test_request_bodies_are_the_backend_wire_format(self):
+    def test_request_bodies_are_the_batch_wire_format(self):
+        """Queued requests use chat-completions even though live calls do not."""
         docs = self._docs(write_txt(self.dir, "a.txt"))
         lines, _ = build_requests(make_provider(), docs, self.template, self.settings)
         body = lines[0]["body"]
-        self.assertIn("input", body)            # responses shape, not messages
-        self.assertEqual(lines[0]["url"], "/v1/responses")
+        self.assertIn("messages", body)
+        self.assertNotIn("input", body)
+        self.assertEqual(lines[0]["url"], "/v1/chat/completions")
         self.assertEqual(body["model"], "gpt-5.6-sol")
 
     def test_the_json_schema_travels_with_each_request(self):
         docs = self._docs(write_txt(self.dir, "a.txt"))
         lines, _ = build_requests(make_provider(), docs, self.template, self.settings)
-        self.assertEqual(lines[0]["body"]["text"]["format"]["name"], "generic_records")
+        schema = lines[0]["body"]["response_format"]["json_schema"]
+        self.assertEqual(schema["name"], "generic_records")
+        self.assertTrue(schema["strict"])
 
     def test_custom_ids_are_unique(self):
         docs = self._docs(*[write_txt(self.dir, f"d{i}.txt") for i in range(5)])
@@ -208,9 +212,9 @@ class BuildRequestsTest(unittest.TestCase):
         lines, _ = build_requests(make_provider(), docs, self.template,
                                   self.settings, with_ocr=True)
         body = lines[0]["body"]
-        self.assertEqual(body["text"]["format"]["name"], "figure_ocr")
-        parts = body["input"][0]["content"]
-        self.assertTrue(any(p["type"] == "input_image" for p in parts))
+        self.assertEqual(body["response_format"]["json_schema"]["name"], "figure_ocr")
+        parts = body["messages"][0]["content"]
+        self.assertTrue(any(p["type"] == "image_url" for p in parts))
 
 
 class ManifestTest(unittest.TestCase):
@@ -248,8 +252,7 @@ class ParseOutputTest(unittest.TestCase):
         return json.dumps({
             "custom_id": custom_id,
             "response": {"status_code": status,
-                         "body": {"output": [{"type": "message", "content": [
-                             {"type": "output_text", "text": text}]}]}},
+                         "body": {"choices": [{"message": {"content": text}}]}},
         })
 
     def test_answers_are_keyed_by_custom_id(self):
@@ -271,8 +274,7 @@ class ParseOutputTest(unittest.TestCase):
     def test_a_string_body_is_decoded(self):
         raw = json.dumps({"custom_id": "r-0", "response": {
             "status_code": 200,
-            "body": json.dumps({"output": [{"type": "message", "content": [
-                {"type": "output_text", "text": "inner"}]}]})}})
+            "body": json.dumps({"choices": [{"message": {"content": "inner"}}]})}})
         self.assertEqual(parse_output(self.provider, raw.encode())["r-0"]["text"], "inner")
 
     def test_blank_and_malformed_lines_are_skipped(self):
@@ -404,3 +406,76 @@ class CollectGuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OptionalParamFallbackTest(unittest.TestCase):
+    """Some models reject sampling controls outright; one retry, not a failed run."""
+
+    def _provider(self, failures):
+        provider = AIModelHubProvider(name="t", base_url="https://gw", api_key="k")
+        seen = []
+
+        def request(method, path, payload=None):
+            seen.append(dict(payload or {}))
+            if len(seen) <= failures:
+                raise ProviderError(
+                    "aimodelhub HTTP 400 from /v1/responses: "
+                    '{"message":"`temperature` is deprecated for this model."}')
+            return {"output": [{"type": "message",
+                                "content": [{"type": "output_text", "text": "ok"}]}]}
+
+        provider.request = request
+        provider.seen = seen
+        return provider
+
+    def test_the_rejected_parameter_is_dropped_and_the_call_retried(self):
+        provider = self._provider(failures=1)
+        self.assertEqual(provider.complete([], "claude-opus-5", temperature=0.0).text, "ok")
+        self.assertIn("temperature", provider.seen[0])
+        self.assertNotIn("temperature", provider.seen[1])
+
+    def test_it_retries_only_once(self):
+        provider = self._provider(failures=2)
+        with self.assertRaises(ProviderError):
+            provider.complete([], "claude-opus-5", temperature=0.0)
+        self.assertEqual(len(provider.seen), 2)
+
+    def test_an_unrelated_400_is_not_retried(self):
+        provider = AIModelHubProvider(name="t", base_url="https://gw", api_key="k")
+        calls = []
+
+        def request(method, path, payload=None):
+            calls.append(1)
+            raise ProviderError("aimodelhub HTTP 400: {\"message\":\"bad model\"}")
+
+        provider.request = request
+        with self.assertRaises(ProviderError):
+            provider.complete([], "m", temperature=0.0)
+        self.assertEqual(len(calls), 1, "a real error must not be retried away")
+
+
+class BatchWireFormatTest(unittest.TestCase):
+    """Batch is queued over chat-completions, even where the live path is not."""
+
+    def test_the_responses_backend_queues_against_chat_completions(self):
+        provider = AIModelHubProvider(name="t", base_url="https://gw", api_key="k")
+        self.assertEqual(provider.INFERENCE_PATH, "/v1/responses")
+        self.assertEqual(provider.batch_endpoint(), "/v1/chat/completions")
+
+    def test_queued_bodies_use_the_chat_shape(self):
+        provider = AIModelHubProvider(name="t", base_url="https://gw", api_key="k")
+        body = provider.build_batch_payload(
+            [{"role": "user", "content": "hi"}], "gpt-5.6-sol", temperature=0.0)
+        self.assertIn("messages", body)
+        self.assertNotIn("input", body)
+
+    def test_queued_answers_are_read_in_the_chat_shape(self):
+        provider = AIModelHubProvider(name="t", base_url="https://gw", api_key="k")
+        completion = provider.parse_batch_completion(
+            {"choices": [{"message": {"content": "queued reply"}}]})
+        self.assertEqual(completion.text, "queued reply")
+
+    def test_a_chat_backend_queues_where_it_already_calls(self):
+        provider = LLMHubProvider(name="t", base_url="https://gw", api_key="k")
+        self.assertEqual(provider.batch_endpoint(), provider.INFERENCE_PATH)
+

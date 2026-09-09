@@ -8,6 +8,7 @@ is returned as ``output_text`` (or reassembled from ``output[].content[]``).
 from __future__ import annotations
 
 from .base import Completion, HTTPProvider, usage_from
+from .llmhub import chat_payload, parse_chat_completion
 
 
 class AIModelHubProvider(HTTPProvider):
@@ -15,6 +16,16 @@ class AIModelHubProvider(HTTPProvider):
 
     API_STYLE = "responses"
     INFERENCE_PATH = "/v1/responses"
+    # Batch is queued against chat-completions even here: that is the endpoint
+    # the gateway's own batch documentation uses, and the Responses API is not
+    # among the shapes its batch runner accepts. Live calls are unaffected.
+    BATCH_INFERENCE_PATH = "/v1/chat/completions"
+
+    def build_batch_payload(self, messages, model, **kwargs) -> dict:
+        return chat_payload(messages, model, **kwargs)
+
+    def parse_batch_completion(self, raw: dict) -> Completion:
+        return parse_chat_completion(raw)
 
     def build_payload(self, messages, model, temperature=0.0, max_tokens=None,
                       json_schema=None, reasoning_effort=None, **kwargs) -> dict:

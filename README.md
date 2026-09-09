@@ -173,7 +173,7 @@ hosts — naming one it has never heard of turns a first run into a 404 hunt.
 | Role | `aimodelhub` | `llmhub` |
 |---|---|---|
 | extraction, OCR, aggregation | `gpt-5.6-sol` | `gpt-4.1` |
-| review (judging records) | `scout-gpt-5.1` | `gpt-4.1-mini` |
+| review (judging records) | `claude-fable-5` | `gpt-4.1-mini` |
 
 Review deliberately uses a different family: a second opinion from the model
 that wrote the answer mostly restates it. `--model` overrides every extraction
@@ -265,4 +265,5 @@ plausible filler.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
 

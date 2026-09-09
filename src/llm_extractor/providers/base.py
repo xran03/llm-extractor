@@ -162,12 +162,40 @@ class HTTPProvider:
         """Read this backend's response shape back into a :class:`Completion`."""
         raise NotImplementedError
 
+    #: Parameters a gateway may reject for a particular model. Some models
+    #: deprecate sampling controls entirely and answer 400 rather than ignoring
+    #: them, so the request is retried once without the offending key.
+    OPTIONAL_PARAMS = ("temperature", "top_p")
+
     def complete(self, messages, model, temperature=0.0, max_tokens=None,
                  json_schema=None, **kwargs) -> Completion:
         payload = self.build_payload(messages, model, temperature=temperature,
                                      max_tokens=max_tokens, json_schema=json_schema,
                                      **kwargs)
-        return self.parse_completion(self.request("POST", self.INFERENCE_PATH, payload))
+        try:
+            raw = self.request("POST", self.INFERENCE_PATH, payload)
+        except ProviderError as exc:
+            rejected = self._rejected_param(exc)
+            if rejected is None:
+                raise
+            # Which models accept which sampling controls changes without
+            # notice, so this reacts to what the gateway said rather than
+            # carrying a list of model names that will quietly rot.
+            payload.pop(rejected, None)
+            raw = self.request("POST", self.INFERENCE_PATH, payload)
+        return self.parse_completion(raw)
+
+    def _rejected_param(self, error: Exception):
+        """The optional parameter this error blames, if it blames exactly one."""
+        message = str(error)
+        if " 400" not in message:
+            return None
+        lowered = message.lower()
+        if not any(word in lowered for word in
+                   ("deprecated", "unsupported", "not supported", "does not support")):
+            return None
+        named = [p for p in self.OPTIONAL_PARAMS if p in lowered]
+        return named[0] if len(named) == 1 else None
 
     def complete_text(self, messages, model, **kwargs) -> str:
         return self.complete(messages, model, **kwargs).text
@@ -177,6 +205,22 @@ class HTTPProvider:
     # it, poll, then download a JSONL of responses. The wire format of each line
     # is whatever ``build_payload`` produces, so a batched call and a live call
     # can never drift apart.
+
+    #: Where queued requests are sent. Batch is an OpenAI-protocol feature and
+    #: gateways implement it over chat-completions; a provider whose live path
+    #: is something else overrides this and the payload builder together.
+    BATCH_INFERENCE_PATH = ""
+
+    def batch_endpoint(self) -> str:
+        return self.BATCH_INFERENCE_PATH or self.INFERENCE_PATH
+
+    def build_batch_payload(self, messages, model, **kwargs) -> dict:
+        """Render one queued request. Defaults to the live wire format."""
+        return self.build_payload(messages, model, **kwargs)
+
+    def parse_batch_completion(self, raw: dict) -> Completion:
+        """Read one queued answer. Defaults to the live response shape."""
+        return self.parse_completion(raw)
 
     def upload_file(self, content: bytes, filename: str = "batch.jsonl",
                     purpose: str = "batch") -> dict:

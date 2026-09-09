@@ -37,11 +37,14 @@ BACKEND_DEFAULTS = {
         "model": "gpt-5.6-sol",
         "ocr_model": "gpt-5.6-sol",
         "agent_model": "gpt-5.6-sol",
-        # A different model, not merely a different name: scout is a separate
-        # family from sol. Anthropic models are visible on this gateway but keys
-        # are commonly scoped away from them, and a default that 403s at call
-        # time is worse than a slightly weaker reviewer that runs.
-        "review_model": "scout-gpt-5.1",
+        # A different vendor, not merely a different name. A second opinion from
+        # the same family as the extractor mostly restates it, and judging a
+        # record is a different job from producing one.
+        #
+        # Keys on this gateway are scoped per model, so a key that cannot reach
+        # Anthropic will get 403 here. `llm-extract check` reports that before a
+        # run rather than failing partway through one.
+        "review_model": "claude-fable-5",
     },
     "llmhub": {
         "model": DEFAULT_MODEL,

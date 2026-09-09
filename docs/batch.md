@@ -119,7 +119,7 @@ Three things make the result trustworthy rather than decorative:
   legitimately covers.
 
 Review defaults to a different model family from extraction (`review_model`,
-`scout-gpt-5.1` on the AI Model Hub), because a second opinion from the model
+`claude-fable-5` on the AI Model Hub), because a second opinion from the model
 that wrote the answer mostly restates it. `review.json` carries the run totals,
 and the four columns are only added once a review has actually run — an
 un-reviewed run does not ship empty columns implying a check nobody performed.
@@ -130,4 +130,5 @@ un-reviewed run does not ship empty columns implying a check nobody performed.
 ---
 
 [Back to the README](../README.md)
+
 

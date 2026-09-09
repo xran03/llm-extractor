@@ -17,34 +17,52 @@ class LLMHubProvider(HTTPProvider):
 
     def build_payload(self, messages, model, temperature=0.0, max_tokens=None,
                       json_schema=None, reasoning_effort=None, **kwargs) -> dict:
-        payload: dict = {
-            "model": model,
-            "messages": [_to_chat_message(m) for m in messages],
-            "temperature": temperature,
-            "stream": False,
-        }
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        if reasoning_effort:
-            payload["reasoning_effort"] = reasoning_effort
-        if json_schema:
-            payload["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": json_schema.get("name", "output"),
-                    "schema": json_schema["schema"],
-                    "strict": bool(json_schema.get("strict", False)),
-                },
-            }
-        payload.update(kwargs.get("extra") or {})
-        return payload
+        return chat_payload(messages, model, temperature=temperature,
+                            max_tokens=max_tokens, json_schema=json_schema,
+                            reasoning_effort=reasoning_effort, **kwargs)
 
     def parse_completion(self, raw: dict) -> Completion:
-        choices = raw.get("choices") or [{}]
-        text = (choices[0].get("message", {}) or {}).get("content") or ""
-        if isinstance(text, list):  # some gateways return content parts
-            text = "".join(part.get("text", "") for part in text if isinstance(part, dict))
-        return Completion(text=text, usage=usage_from(raw), raw=raw)
+        return parse_chat_completion(raw)
+
+
+def chat_payload(messages, model, temperature=0.0, max_tokens=None,
+                 json_schema=None, reasoning_effort=None, **kwargs) -> dict:
+    """Render a call in chat-completions wire format.
+
+    Shared rather than owned by one provider: batch jobs are queued against
+    ``/v1/chat/completions`` even on gateways whose live path is the Responses
+    API, so the Responses backend needs this shape too.
+    """
+    payload: dict = {
+        "model": model,
+        "messages": [_to_chat_message(m) for m in messages],
+        "temperature": temperature,
+        "stream": False,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    if reasoning_effort:
+        payload["reasoning_effort"] = reasoning_effort
+    if json_schema:
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": json_schema.get("name", "output"),
+                "schema": json_schema["schema"],
+                "strict": bool(json_schema.get("strict", False)),
+            },
+        }
+    payload.update(kwargs.get("extra") or {})
+    return payload
+
+
+def parse_chat_completion(raw: dict) -> Completion:
+    """Read a chat-completions response back into a :class:`Completion`."""
+    choices = raw.get("choices") or [{}]
+    text = (choices[0].get("message", {}) or {}).get("content") or ""
+    if isinstance(text, list):  # some gateways return content parts
+        text = "".join(part.get("text", "") for part in text if isinstance(part, dict))
+    return Completion(text=text, usage=usage_from(raw), raw=raw)
 
 
 def _to_chat_message(message: dict) -> dict:

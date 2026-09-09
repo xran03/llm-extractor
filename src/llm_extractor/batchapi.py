@@ -12,7 +12,7 @@ Three commands, because the job outlives the process that starts it:
 ``status``  ask the gateway how far along the batch is;
 ``fetch``   download the answers and write the ordinary artifacts.
 
-The request bodies come from the same ``build_payload`` the live path uses, so a
+The request bodies come from the same renderer the live path uses, so a
 batched extraction and a live one cannot drift apart. Results are reassembled
 through the manifest rather than by parsing ids, so a document that was split
 into chunks comes back as one record set in the original order.
@@ -142,8 +142,8 @@ def preflight(provider) -> dict:
     probe = json.dumps({
         "custom_id": "preflight-1",
         "method": "POST",
-        "url": provider.INFERENCE_PATH,
-        "body": provider.build_payload(
+        "url": provider.batch_endpoint(),
+        "body": provider.build_batch_payload(
             [{"role": "user", "content": "ping"}], model="preflight", max_tokens=1),
     }).encode("utf-8")
     try:
@@ -177,7 +177,7 @@ def build_requests(provider, documents, template, settings, with_ocr: bool = Fal
 
     def add(task: Task, body: dict) -> None:
         lines.append({"custom_id": task.custom_id, "method": "POST",
-                      "url": provider.INFERENCE_PATH, "body": body})
+                      "url": provider.batch_endpoint(), "body": body})
         tasks.append(task)
 
     for source_doc in documents:
@@ -194,7 +194,7 @@ def build_requests(provider, documents, template, settings, with_ocr: bool = Fal
             add(
                 Task(custom_id=f"r-{len(tasks)}", stage=STAGE_EXTRACT, chunk=index,
                      n_chunks=len(chunks), **common),
-                provider.build_payload(
+                provider.build_batch_payload(
                     build_messages(template, chunk, document.doc_id, label),
                     model=settings.model, temperature=settings.temperature,
                     max_tokens=settings.max_output_tokens, json_schema=schema),
@@ -216,7 +216,7 @@ def build_requests(provider, documents, template, settings, with_ocr: bool = Fal
             add(
                 Task(custom_id=f"r-{len(tasks)}", stage=STAGE_OCR,
                      figure=figure.name, **common),
-                provider.build_payload(
+                provider.build_batch_payload(
                     [user_message(prompt, image_part(data, mime=mime_for(figure)))],
                     model=settings.ocr_model, temperature=0.0,
                     max_tokens=4000, json_schema=OCR_JSON_SCHEMA),
@@ -238,7 +238,7 @@ def _queue(provider, lines, tasks, settings, out_dir, completion_window,
     if not file_id:
         raise ProviderError(f"upload returned no file id: {str(uploaded)[:200]}")
 
-    batch = provider.create_batch(file_id, endpoint=provider.INFERENCE_PATH,
+    batch = provider.create_batch(file_id, endpoint=provider.batch_endpoint(),
                                   completion_window=completion_window)
     batch_id = batch.get("id")
     if not batch_id:
@@ -247,7 +247,7 @@ def _queue(provider, lines, tasks, settings, out_dir, completion_window,
     manifest = Manifest(
         batch_id=batch_id, input_file_id=file_id, api=settings.api,
         model=model, template=template_name, kind=kind,
-        endpoint=provider.INFERENCE_PATH, tasks=tasks,
+        endpoint=provider.batch_endpoint(), tasks=tasks,
     )
     manifest.save(Path(out_dir) / MANIFEST_NAME)
     return manifest
@@ -291,8 +291,8 @@ def build_review_requests(provider, documents, records_by_doc, template,
                         payload={"positions": positions})
             lines.append({
                 "custom_id": task.custom_id, "method": "POST",
-                "url": provider.INFERENCE_PATH,
-                "body": provider.build_payload(
+                "url": provider.batch_endpoint(),
+                "body": provider.build_batch_payload(
                     review.build_messages(records, positions, chunk, template,
                                           document.doc_id, label),
                     model=settings.review_model, temperature=0.0,
@@ -345,7 +345,7 @@ def parse_output(provider, raw_jsonl: bytes) -> dict:
             answers[custom_id] = {"error": f"HTTP {status}: {str(body)[:200]}", "text": ""}
             continue
         try:
-            text = provider.parse_completion(body).text
+            text = provider.parse_batch_completion(body).text
         except Exception as exc:
             answers[custom_id] = {"error": f"unreadable response: {exc}", "text": ""}
             continue
@@ -582,3 +582,5 @@ def collect(provider, manifest: Manifest, template, settings, out_dir) -> dict:
     (out_path / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return summary
+
+
