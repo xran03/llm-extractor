@@ -159,6 +159,24 @@ def write_figures_csv(path, rows) -> Path:
     return path
 
 
+def header_matches(path, columns) -> bool:
+    """True when an existing CSV already carries exactly these columns.
+
+    Resuming into a directory should extend the combined table, not replace it.
+    But only when the columns still line up: a run with a different template
+    writes different columns, and appending those under the old header would
+    produce a file whose rows no longer mean what the header says.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return False
+    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+        first = fh.readline()
+    if not first.strip():
+        return False
+    return next(csv.reader([first]), []) == list(columns)
+
+
 def append_records_csv(path, records, template, doc_title: str = "",
                        write_header: bool = False) -> Path:
     """Append rows to the run-level combined CSV.

@@ -22,7 +22,8 @@ from .jobstore import (JobStore, STATUS_ERROR, STATUS_OK, STATUS_RUNNING,
 from .pipeline import run_document
 from .providers import build_provider
 from .scheduler import RateLimiter, Scheduler, Skip
-from .serialize import append_figures_csv, append_records_csv, figure_rows
+from .serialize import (FIGURE_COLUMNS, append_figures_csv, append_records_csv,
+                        figure_rows, header_matches, record_columns)
 from .sources import build_source
 from .templates import load_template
 
@@ -139,10 +140,21 @@ def _run_job(settings, source_name, source_params, out_dir, bus, store, job_id,
 
     # One combined table per run is what most people open first; it is appended
     # to as documents finish rather than held in memory until the end.
+    #
+    # A resumed run must extend that table rather than start it again. Resume
+    # skips documents that are already done, so rewriting the file would leave
+    # it holding only whatever this run happened to process — the combined table
+    # would silently lose every document extracted earlier, while the
+    # per-document CSVs beside it still showed them.
     wants_csv = settings.output_format in ("csv", "both")
     combined_records = out_path / "records.csv"
     combined_figures = out_path / "figures.csv"
-    tables_started = {"records": False, "figures": False}
+    tables_started = {
+        "records": bool(resume and wants_csv
+                        and header_matches(combined_records, record_columns(template))),
+        "figures": bool(resume and wants_csv
+                        and header_matches(combined_figures, FIGURE_COLUMNS)),
+    }
 
     def _append_tables(outcome) -> None:
         if not wants_csv:

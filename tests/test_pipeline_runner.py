@@ -16,8 +16,8 @@ from llm_extractor.sources import SourceDocument
 from llm_extractor.templates import load_template
 from llm_extractor.ingest import Document
 
-from ._fakes import (FakeProvider, write_docx, write_png, write_pptx, write_txt,
-                     write_xml)
+from ._fakes import (SAMPLE_TEXT, FakeProvider, write_docx, write_png, write_pptx,
+                     write_txt, write_xml)
 
 
 def make_settings(tmp: Path, **overrides) -> Settings:
@@ -202,6 +202,47 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(summary.total, 3)
         self.assertEqual(summary.ok, 3)
         self.assertEqual(summary.failed, 0)
+
+    def test_a_resumed_run_extends_the_combined_table(self):
+        """Resume skips finished documents, so rewriting would lose them."""
+        from llm_extractor.serialize import read_csv
+
+        self._run()
+        first = read_csv(self.out / "records.csv")
+        self.assertTrue(first)
+
+        write_txt(self.docs, "d.txt", text=SAMPLE_TEXT + "\nA later arrival.")
+        self._run(resume=True)
+
+        rows = read_csv(self.out / "records.csv")
+        self.assertGreater(len(rows), len(first))
+        self.assertIn("a", {r["doc_id"] for r in rows}, "earlier document dropped")
+        self.assertIn("d", {r["doc_id"] for r in rows}, "new document missing")
+
+    def test_a_fresh_run_replaces_the_combined_table(self):
+        from llm_extractor.serialize import read_csv
+
+        self._run()
+        before = len(read_csv(self.out / "records.csv"))
+        self._run(resume=False)
+        self.assertEqual(len(read_csv(self.out / "records.csv")), before)
+
+    def test_a_different_template_replaces_the_combined_table(self):
+        """Appending new columns under the old header would misdescribe the rows."""
+        from llm_extractor.serialize import read_csv
+
+        self._run()
+        settings = make_settings(self.dir)
+        settings.template = "immunogenicity"
+        run_job(settings, source_name="folder",
+                source_params={"input_dir": str(self.docs)},
+                out_dir=str(self.out), store=self.store, resume=False)
+
+        header = (self.out / "records.csv").read_text(
+            encoding="utf-8-sig").splitlines()[0]
+        self.assertIn("assay", header)
+        self.assertNotIn("subject", header)
+        self.assertTrue(read_csv(self.out / "records.csv"))
 
     def test_records_are_counted(self):
         self.assertEqual(self._run().records, 6)
