@@ -201,7 +201,13 @@ class RestSource(Source):
         search = merged.get("search")
         if isinstance(raw_query, str):
             search = search or raw_query
-            raw_query = None
+            # A search term arriving as `query` must not displace the
+            # connector's own static parameters. Europe PMC needs
+            # `resultType=core` to return abstracts at all, and dropping it
+            # yields records whose text is silently empty, which no caller can
+            # distinguish from a genuinely abstract-less paper.
+            default_query = self.defaults.get("query")
+            raw_query = dict(default_query) if isinstance(default_query, dict) else None
         elif raw_query is not None and not isinstance(raw_query, dict):
             raise RestSourceError(
                 f"{self.name}: 'query' must be a search term or an object of "

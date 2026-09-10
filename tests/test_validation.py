@@ -156,6 +156,20 @@ class SearchParameterTest(unittest.TestCase):
         with self.assertRaises(RestSourceError):
             build_source("openalex", query=12345)
 
+    def test_search_term_keeps_the_connector_static_parameters(self):
+        """Europe PMC returns no abstract without `resultType=core`.
+
+        A search term supplied as `query` used to displace the connector's
+        static parameters, so every keyword harvest came back with empty text
+        and nothing downstream could tell that apart from a paper that really
+        has no abstract.
+        """
+        source = build_source("europepmc", query="pneumococcal conjugate")
+        url = source._build_url({})
+        self.assertIn("resultType=core", url)
+        self.assertIn("format=json", url)
+        self.assertIn("query=pneumococcal+conjugate", url)
+
 
 class VisionTriageTest(unittest.TestCase):
     """Only pages the text pass could not read are worth a vision call."""
