@@ -211,9 +211,23 @@ def summary(records: list) -> dict:
     }
 
 
+class ReviewUnanswered(RuntimeError):
+    """The reviewer returned no verdict for a whole request.
+
+    A review that annotates nothing must not be mistaken for a review that
+    found nothing wrong: the first means the check never ran. Some models
+    answer this schema with an empty object, and swallowing that would let a
+    run report clean records it never actually examined.
+    """
+
+
 def review_document(provider, records: list, doc_text: str, template, doc_id: str,
-                    model: str, max_tokens: int = 4000) -> int:
-    """Review one document's records live. Returns how many were annotated."""
+                    model: str, max_tokens: int = 4000, strict: bool = True) -> int:
+    """Review one document's records live. Returns how many were annotated.
+
+    Raises :class:`ReviewUnanswered` when a request comes back with no usable
+    verdicts at all, unless ``strict`` is disabled.
+    """
     requests = plan(records, doc_text)
     annotated = 0
     for index, (chunk, positions) in enumerate(requests):
@@ -224,5 +238,11 @@ def review_document(provider, records: list, doc_text: str, template, doc_id: st
             json_schema=REVIEW_JSON_SCHEMA,
             meta={"stage": "review", "doc_id": doc_id},
         )
-        annotated += apply_verdicts(records, positions, completion.text)
+        applied = apply_verdicts(records, positions, completion.text)
+        if applied == 0 and positions and strict:
+            raise ReviewUnanswered(
+                f"{model} returned no verdicts for {doc_id}{label} "
+                f"({len(positions)} records); the review did not run"
+            )
+        annotated += applied
     return annotated

@@ -129,6 +129,42 @@ class ApplyVerdictsTest(unittest.TestCase):
         self.assertEqual(review.summary(rows)["value_rejected"], 0)
 
 
+class ReviewDocumentTest(unittest.TestCase):
+    """A review that never ran must not look like a review that passed."""
+
+    @staticmethod
+    def _provider(reply):
+        class FakeProvider:
+            def complete(self, messages, model, **kwargs):
+                class C:
+                    text = reply
+                return C()
+        return FakeProvider()
+
+    def test_an_empty_reply_is_reported_rather_than_swallowed(self):
+        """Some models answer this schema with `{}`.
+
+        Counting that as a clean review would mark every record as examined
+        and unflagged when nothing was examined at all.
+        """
+        with self.assertRaises(review.ReviewUnanswered):
+            review.review_document(self._provider("{}"), records(),
+                                   "a document text", TEMPLATE, "d", model="m")
+
+    def test_the_records_are_left_unreviewed_after_an_empty_reply(self):
+        rows = records()
+        with self.assertRaises(review.ReviewUnanswered):
+            review.review_document(self._provider("{}"), rows,
+                                   "a document text", TEMPLATE, "d", model="m")
+        self.assertEqual(review.summary(rows)["reviewed"], 0)
+
+    def test_a_caller_can_opt_out_of_the_error(self):
+        annotated = review.review_document(
+            self._provider("{}"), records(), "a document text", TEMPLATE, "d",
+            model="m", strict=False)
+        self.assertEqual(annotated, 0)
+
+
 class SummaryTest(unittest.TestCase):
     def test_counts_each_kind_of_rejection(self):
         rows = records()
