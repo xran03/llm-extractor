@@ -294,6 +294,24 @@ IMMUNOGENICITY = ExtractionTemplate(
         "without a statistical test. Fill comparison_a/comparison_b; leave "
         "value/group_label null. Use significant='no' when the text explicitly "
         "reports no significant difference.\n"
+        "(A1) DOSE RESOLUTION - a comparison reported across several doses is "
+        "several records, one per dose, each carrying that dose in dose_ug. "
+        "'higher at all doses' with 0.01, 0.1 and 1.0 ug tested is three "
+        "records, not one. Before you finish, take each comparison you are "
+        "reporting and check the text and figures for every dose the study "
+        "tested: if a result is stated at that dose, emit a record for it. A "
+        "comparison that appears at one dose and is missing at another the "
+        "study also tested is usually an omission on your part. Leave dose_ug "
+        "null only when the comparison genuinely has no dose, such as a pooled "
+        "or dose-independent statement.\n"
+        "(A2) WORK THROUGH THE REPORT SYSTEMATICALLY - before writing records, "
+        "identify each design factor the study varied and, for each one, the "
+        "levels compared and the doses tested. Then emit one record for every "
+        "(factor, level pair, assay, dose) the report states a result for. A "
+        "study that varies four factors at three doses states far more "
+        "comparisons than a first reading of the prose suggests; figure legends "
+        "and result tables usually carry the per-dose results that the prose "
+        "summarises in a single sentence.\n"
         "(B) MEASUREMENT records - one object per explicitly reported numeric data "
         "point. Fill group_label/value/value_unit; leave comparison_a/comparison_b "
         "null.\n"
@@ -301,12 +319,35 @@ IMMUNOGENICITY = ExtractionTemplate(
         "with censoring='left_censored'; assays that could not be run become "
         "records with value=null and an explanation in notes.\n"
         "(D) DESIGN COVARIATES - one atomic fact per field. Never pack serotype, "
-        "carrier, chemistry, valency or dose into group_label."
+        "carrier, chemistry, valency or dose into group_label.\n"
+        "(E) NAME AN ARM BY WHAT MAKES IT DIFFERENT - comparison_a and "
+        "comparison_b are two levels of the factor named in factor_type, so "
+        "label each by that level alone and drop everything the two arms share. "
+        "Two CRM197 conjugates differing only in process are 'RAC/DMSO' and "
+        "'RAC/Aqueous', not 'Pn3-CRM197 RAC/DMSO' and 'Pn3-CRM197 RAC/Aqueous'; "
+        "two sizes are '250kDa' and '150kDa'. Resolve a loose reference such as "
+        "'the commercial process' or 'the control' to the level the report names "
+        "elsewhere, and never leave a bare 'commercial', 'control' or "
+        "'reference' as a label.\n"
+        "(F) ONE ARM IS ONE LEVEL - never put two levels in one label. A "
+        "sentence comparing 150 kDa and 25 kDa against 250 kDa is two records, "
+        "not one arm reading '150kDa and 25kDa'.\n"
+        "(G) KEEP THE REPORT'S OWN WORDING FOR A LEVEL - when the report "
+        "describes a level qualitatively, use that wording and keep any number "
+        "it gives in parentheses: 'High DoA (14)' and 'Low DoA', not 'DoA 14' "
+        "and 'DoA 7'."
     ),
     key_fields=["assay", "endpoint", "factor_type", "dose_ug", "serotype"],
     fields=[
         Field("assay", "string", "Assay type.", ["opa", "igg", "na"]),
-        Field("endpoint", "string", "Endpoint, e.g. 'GMT', 'GMC', 'Concentration'."),
+        Field("endpoint", "string",
+              "The summary statistic reported. A geometric mean titre is 'gmt' "
+              "whether or not the text spells out 'geometric mean'; a geometric "
+              "mean concentration is 'gmc'; a plain concentration is "
+              "'concentration'; a proportion of responders or non-responders is "
+              "'responder_rate'.",
+              ["gmt", "gmc", "concentration", "seroconversion",
+               "responder_rate", "na"]),
         Field("factor_type", "string", "Design factor being compared.",
               ["chemistry", "carrier", "polysaccharide_size", "degree_of_activation",
                "chemistry_plus_carrier", "na"]),
