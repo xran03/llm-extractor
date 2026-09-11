@@ -121,6 +121,53 @@ class ExtractTest(unittest.TestCase):
         self.assertEqual(summary["values_ungrounded"], 1)
 
 
+class TruncationTest(unittest.TestCase):
+    """A completion stopped by the output cap must say so.
+
+    The JSON parser salvages whatever arrived before the cut, which is right,
+    but a silent salvage lets a dense document lose most of its records while
+    the run still reports success.
+    """
+
+    def setUp(self):
+        self.template = BUILTIN_TEMPLATES["generic"]
+        self.document = Document(doc_id="d1", text=SAMPLE_TEXT)
+
+    @staticmethod
+    def _provider(completion_tokens):
+        class Capped(FakeProvider):
+            def complete(self, messages, model, temperature=0.0,
+                         max_tokens=None, json_schema=None, meta=None, **kw):
+                reply = super().complete(messages, model, temperature,
+                                         max_tokens, json_schema, meta, **kw)
+                reply.usage.completion_tokens = completion_tokens
+                return reply
+        return Capped()
+
+    def test_hitting_the_cap_is_reported(self):
+        result = extract_records(self._provider(500), self.document,
+                                 self.template, model="m", max_tokens=500)
+        self.assertEqual(result.truncated, 1)
+        self.assertTrue(any("truncated" in e for e in result.errors),
+                        result.errors)
+
+    def test_salvaged_records_are_still_kept(self):
+        result = extract_records(self._provider(500), self.document,
+                                 self.template, model="m", max_tokens=500)
+        self.assertEqual(len(result.records), 2)
+
+    def test_a_completion_below_the_cap_is_not_flagged(self):
+        result = extract_records(self._provider(120), self.document,
+                                 self.template, model="m", max_tokens=500)
+        self.assertEqual(result.truncated, 0)
+        self.assertEqual(result.errors, [])
+
+    def test_the_count_appears_in_usage(self):
+        result = extract_records(self._provider(500), self.document,
+                                 self.template, model="m", max_tokens=500)
+        self.assertEqual(result.usage()["truncated_chunks"], 1)
+
+
 class OcrTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

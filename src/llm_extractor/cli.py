@@ -77,6 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--workers", type=int, help=argparse.SUPPRESS)
     run.add_argument("--rate-limit", type=int, default=0,
                      help="max API calls per minute")
+    run.add_argument("--max-output-tokens", type=int, default=0,
+                     help="output token budget per request; raise it when a "
+                          "dense document reports truncation")
     run.add_argument("--ocr", choices=["auto", "always", "never"], default=None,
                      help="figure OCR policy (default: auto)")
     run.add_argument("--chart", choices=["auto", "always", "never"], default=None,
@@ -252,6 +255,7 @@ def settings_from_args(args, allow_prompt: bool = False):
         chart=getattr(args, "chart", None),
         output_format=getattr(args, "output_format", None),
         aggregate=False if getattr(args, "no_aggregate", False) else None,
+        max_output_tokens=(getattr(args, "max_output_tokens", 0) or None),
         max_workers=getattr(args, "workers", None),
     )
 

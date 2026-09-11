@@ -29,6 +29,7 @@ class ExtractionResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_calls: int = 0
+    truncated: int = 0
     errors: list = field(default_factory=list)
 
     def usage(self) -> dict:
@@ -37,6 +38,7 @@ class ExtractionResult:
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "cached_calls": self.cached_calls,
+            "truncated_chunks": self.truncated,
         }
 
 
@@ -111,6 +113,17 @@ def extract_records(provider, document, template, model: str,
         result.prompt_tokens += completion.usage.prompt_tokens
         result.completion_tokens += completion.usage.completion_tokens
         result.cached_calls += 1 if completion.usage.cached else 0
+        # A completion stopped by the output cap loses whatever it had not
+        # written yet. `extract_json_array` salvages the records that did
+        # arrive, which is the right thing to do, but staying silent about it
+        # would let a run drop most of a dense document and still look clean.
+        if completion.usage.completion_tokens >= max_tokens:
+            result.truncated += 1
+            result.errors.append(
+                f"output truncated at {max_tokens} tokens; records after the "
+                f"cut were lost. Raise --max-output-tokens or narrow the "
+                f"template."
+            )
         try:
             raw_records = extract_json_array(completion.text)
         except ValueError as exc:
@@ -161,11 +174,14 @@ def _safe(fn, result: ExtractionResult):
 def dedupe(records: list, template) -> list:
     """Drop duplicates produced by overlapping chunks.
 
-    Identity is the template's key fields plus the evidence span, so the same
-    fact quoted from the same sentence collapses to one record while genuinely
-    repeated measurements are preserved.
+    A template that declares key fields says which of them identify a fact, and
+    those plus the evidence span decide identity. A template that declares none
+    is compared on every field it defines instead of on an arbitrary prefix:
+    guessing that the first two columns identify a record silently merges rows
+    that differ in the third, which is how a dose-resolved comparison loses two
+    of its three doses.
     """
-    key_fields = template.key_fields or template.field_names[:2]
+    key_fields = template.key_fields or template.field_names
     seen = set()
     unique = []
     for record in records:
