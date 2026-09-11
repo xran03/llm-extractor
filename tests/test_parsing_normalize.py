@@ -4,9 +4,9 @@ from __future__ import annotations
 import unittest
 
 from llm_extractor.normalize import (annotate_grounding, canon_category, coerce_record,
-                                     fix_units, number_unit_pairs, numbers_in_text,
-                                     parse_number, span_is_grounded, token_set_similarity,
-                                     value_supported_by_span)
+                                     fix_units, normalize_p_value, number_unit_pairs,
+                                     numbers_in_text, parse_number, span_is_grounded,
+                                     token_set_similarity, value_supported_by_span)
 from llm_extractor.parsing import extract_json_array, extract_json_object, strip_fences
 from llm_extractor.templates import BUILTIN_TEMPLATES
 
@@ -109,6 +109,43 @@ class CoercionTest(unittest.TestCase):
     def test_units_are_repaired_in_text_fields(self):
         record = coerce_record({"unit": "\ufffdg/mL"}, self.template, "d1")
         self.assertEqual(record["unit"], "µg/mL")
+
+
+class PValueNormalizationTest(unittest.TestCase):
+    """The schema asks for the value; models return the sentence's phrasing.
+
+    A consumer filtering on significance parses `<0.05`, not `P <0.05`, so the
+    label has to come off before the row is written.
+    """
+
+    def test_the_p_label_and_equals_sign_are_removed(self):
+        self.assertEqual(normalize_p_value("P = 0.0005"), "0.0005")
+        self.assertEqual(normalize_p_value("p=0.0228"), "0.0228")
+
+    def test_a_comparator_is_kept(self):
+        self.assertEqual(normalize_p_value("P <0.05"), "<0.05")
+        self.assertEqual(normalize_p_value("p < 0.0005"), "<0.0005")
+        self.assertEqual(normalize_p_value(">0.99"), ">0.99")
+
+    def test_unicode_comparators_become_ascii(self):
+        self.assertEqual(normalize_p_value("p \u2264 0.01"), "<=0.01")
+        self.assertEqual(normalize_p_value("P \u2265 0.2"), ">=0.2")
+
+    def test_a_bare_value_is_unchanged(self):
+        self.assertEqual(normalize_p_value("0.0039"), "0.0039")
+        self.assertEqual(normalize_p_value("<0.001"), "<0.001")
+
+    def test_an_unparseable_value_is_kept_rather_than_dropped(self):
+        self.assertEqual(normalize_p_value("not significant"), "not significant")
+
+    def test_empty_input(self):
+        self.assertIsNone(normalize_p_value(None))
+        self.assertIsNone(normalize_p_value("   "))
+
+    def test_coercion_applies_it_to_the_record(self):
+        template = BUILTIN_TEMPLATES["immunogenicity"]
+        record = coerce_record({"p_value": "P = 0.0005"}, template, "d")
+        self.assertEqual(record["p_value"], "0.0005")
 
 
 class GroundingTest(unittest.TestCase):

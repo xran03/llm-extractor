@@ -123,6 +123,43 @@ def canon_category(value, allowed, default: str = "na") -> str:
     return text
 
 
+#: Fields whose value is a p-value. Models restate them as they appear in the
+#: sentence — "P = 0.0005", "p<0.05" — but the schema asks for the value alone,
+#: and a consumer filtering on significance cannot parse the prose form.
+P_VALUE_FIELDS = ("p_value",)
+
+_P_VALUE_RE = re.compile(
+    r"""^\s*
+        (?:[pP]\s*(?:-?\s*value)?\s*)?      # an optional "P" or "p-value" label
+        (?P<op>[<>=]{0,2}|[\u2264\u2265])   # a comparator, if the paper gave one
+        \s*
+        (?P<number>\d*\.?\d+(?:\s*[eE]\s*[-+]?\d+)?)
+        \s*$""",
+    re.VERBOSE,
+)
+
+
+def normalize_p_value(value):
+    """Reduce a stated p-value to comparator plus number, or leave it alone.
+
+    ``P = 0.0005`` and ``p<0.05`` become ``0.0005`` and ``<0.05``. A value that
+    does not parse is returned unchanged rather than discarded: an unusual
+    formulation is still evidence, and silently dropping it would be worse than
+    leaving it for a human to read.
+    """
+    if value is None:
+        return None
+    text = canon_text(value)
+    if not text:
+        return None
+    match = _P_VALUE_RE.match(text)
+    if not match:
+        return text
+    operator = match.group("op").replace("=", "")
+    operator = {"\u2264": "<=", "\u2265": ">="}.get(operator, operator)
+    return f"{operator}{match.group('number').replace(' ', '')}"
+
+
 def coerce_record(raw: dict, template, doc_id: str) -> dict:
     """Project a raw model object onto the template's schema."""
     record = template.empty_record()
@@ -146,6 +183,8 @@ def coerce_record(raw: dict, template, doc_id: str) -> dict:
                 value.strip().lower() in ("true", "yes", "1")
         elif enum:
             record[name] = canon_category(value, enum)
+        elif name in P_VALUE_FIELDS:
+            record[name] = normalize_p_value(value)
         else:
             record[name] = fix_units(canon_text(value)) or None
 
